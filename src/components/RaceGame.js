@@ -96,14 +96,12 @@ export default function RaceGame({ session }) {
     if (savedRef.current) return;
     savedRef.current = true;
     try {
-      const payload = {
-        user_id: session?.user?.id,
-        duration,
-        level,
-        score,
-        attempts,
-      };
-      const { error } = await supabase.from('race_runs').insert(payload);
+      const { error } = await supabase.rpc('save_race_run', {
+        p_duration: duration,
+        p_level: level,
+        p_score: score,
+        p_attempts: attempts,
+      });
       if (error) throw error;
       setSaveMsg('Run sauvegardé ✅');
     } catch (e) {

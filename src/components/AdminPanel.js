@@ -85,25 +85,15 @@ export default function AdminPanel({ onClose }) {
     setSavingOverride(true);
     setOverrideMsg('');
     try {
-      const payload = {
-        day_key: dayKey,
-        riddle_id: rid !== '' ? Number(rid) : null,
-        question: q || null,
-        type: q ? t : null,
-        answer: q ? a : null,
-      };
-      const { error } = await supabase.from('riddle_overrides').upsert(payload);
+      const { error } = await supabase.rpc('admin_set_riddle', {
+        p_day: dayKey,
+        p_riddle_id: rid !== '' ? Number(rid) : null,
+        p_question: q || null,
+        p_type: q ? t : null,
+        p_answer: q ? a : null,
+      });
       if (error) throw error;
-      // Reset du leaderboard / tentatives du jour
-      const { error: delErr } = await supabase
-        .from('attempts')
-        .delete()
-        .eq('day_key', dayKey);
-      if (delErr) {
-        setOverrideMsg("Override enregistré ✅ mais échec du reset (RLS/politiques à ajuster)");
-      } else {
-        setOverrideMsg('Override enregistré et leaderboard réinitialisé ✅');
-      }
+      setOverrideMsg('Override enregistré et leaderboard réinitialisé ✅');
       // Notifie l'UI pour rafraîchir instantanément
       window.dispatchEvent(new CustomEvent('mathle:override-updated', { detail: { dayKey } }));
     } catch (e) {
@@ -118,21 +108,9 @@ export default function AdminPanel({ onClose }) {
     setSavingOverride(true);
     setOverrideMsg('');
     try {
-      const { error } = await supabase
-        .from('riddle_overrides')
-        .delete()
-        .eq('day_key', dayKey);
+      const { error } = await supabase.rpc('admin_clear_riddle', { p_day: dayKey });
       if (error) throw error;
-      // Reset du leaderboard / tentatives du jour
-      const { error: delErr } = await supabase
-        .from('attempts')
-        .delete()
-        .eq('day_key', dayKey);
-      if (delErr) {
-        setOverrideMsg("Override supprimé ✅ mais échec du reset (RLS/politiques à ajuster)");
-      } else {
-        setOverrideMsg('Override supprimé et leaderboard réinitialisé ✅');
-      }
+      setOverrideMsg('Override supprimé et leaderboard réinitialisé ✅');
       setRid(''); setQ(''); setA(''); setT('word');
       // Notifie l'UI pour rafraîchir instantanément
       window.dispatchEvent(new CustomEvent('mathle:override-updated', { detail: { dayKey } }));
@@ -150,9 +128,11 @@ export default function AdminPanel({ onClose }) {
     setBanning(true);
     setBanMsg('');
     try {
-      const { error } = await supabase
-        .from('bans')
-        .upsert({ user_id: banUserId, reason: banReason || null });
+      const { error } = await supabase.rpc('admin_set_ban', {
+        p_user: banUserId,
+        p_reason: banReason || null,
+        p_banned: true,
+      });
       if (error) throw error;
       setBanMsg('Utilisateur banni ✅');
     } catch (e) {
@@ -168,10 +148,11 @@ export default function AdminPanel({ onClose }) {
     setBanning(true);
     setBanMsg('');
     try {
-      const { error } = await supabase
-        .from('bans')
-        .delete()
-        .eq('user_id', banUserId);
+      const { error } = await supabase.rpc('admin_set_ban', {
+        p_user: banUserId,
+        p_reason: banReason || null,
+        p_banned: false,
+      });
       if (error) throw error;
       setBanMsg('Utilisateur débanni ✅');
     } catch (e) {
@@ -187,10 +168,10 @@ export default function AdminPanel({ onClose }) {
     setBannerSaving(true);
     setBannerMsg('');
     try {
-      const payload = { id: 1, active: bannerActive, message: bannerMessage };
-      const { error } = await supabase
-        .from('site_banner')
-        .upsert(payload);
+      const { error } = await supabase.rpc('admin_set_banner', {
+        p_active: bannerActive,
+        p_message: bannerMessage,
+      });
       if (error) throw error;
       setBannerMsg('Bandeau enregistré ✅');
       window.dispatchEvent(new CustomEvent('mathle:banner-updated'));
@@ -207,10 +188,9 @@ export default function AdminPanel({ onClose }) {
     setRaceSaving(true);
     setRaceMsg('');
     try {
-      const payload = { id: 1, suspended: raceSuspended };
-      const { error } = await supabase
-        .from('race_settings')
-        .upsert(payload);
+      const { error } = await supabase.rpc('admin_set_race', {
+        p_suspended: raceSuspended,
+      });
       if (error) throw error;
       setRaceMsg('Paramètres Course enregistrés ✅');
       window.dispatchEvent(new CustomEvent('mathle:race-updated'));

@@ -22,17 +22,13 @@ export default function Leaderboard({ onSelectUser }) {
       setLoading(true);
       setError('');
       try {
+        // Use RPC aggregated on server for today's leaderboard
         const { data, error } = await supabase
-          .from('attempts')
-          .select('user_id')
-          .eq('day_key', dayKey);
+          .rpc('get_leaderboard_today');
 
         if (error) throw error;
 
-        const counts = new Map();
-        for (const r of data || []) {
-          counts.set(r.user_id, (counts.get(r.user_id) || 0) + 1);
-        }
+        const counts = new Map((data || []).map(r => [r.user_id, r.attempts]));
 
         const userIds = Array.from(counts.keys());
         let namesById = new Map();

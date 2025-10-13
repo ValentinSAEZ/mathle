@@ -324,7 +324,7 @@ export default function Game({ session }) {
 
   return (
     <div style={{ maxWidth: 760, margin: "80px auto", padding: "0 16px" }}>
-      <h1 style={{ textAlign: "center" }}>🧩 Mathle — L’énigme du jour</h1>
+      <h1 style={{ textAlign: "center" }}>🧩 BrainteaserDay — L’énigme du jour</h1>
 
       <div style={{ textAlign: "center", margin: "12px 0", fontSize: 14, opacity: 0.8 }}>
         {`Énigme du ${dayKey} (UTC) • Prochaine dans ${timeParts.h}h ${timeParts.m}m ${timeParts.s}s`}
@@ -339,7 +339,13 @@ export default function Game({ session }) {
         }}
       >
         <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 16 }}>
-          {riddle.question}
+          {String(riddle.question || '')
+            .split(/\n{2,}/)
+            .map((para, i) => (
+              <p key={i} style={{ margin: '0 0 12px 0', whiteSpace: 'pre-line' }}>
+                {para}
+              </p>
+            ))}
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", gap: 8 }}>
