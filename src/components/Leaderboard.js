@@ -9,6 +9,16 @@ function getUTCDateKey() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function initialsOf(name) {
+  try {
+    const parts = String(name || '').trim().split(/[\s._-]+/).filter(Boolean);
+    if (parts.length === 0) return '?';
+    const a = (parts[0][0] || '').toUpperCase();
+    const b = (parts[1]?.[0] || '').toUpperCase();
+    return (a + b) || a || '?';
+  } catch { return '?'; }
+}
+
 export default function Leaderboard({ onSelectUser }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -70,52 +80,31 @@ export default function Leaderboard({ onSelectUser }) {
   }, [dayKey]);
 
   return (
-    <aside
-      style={{
-        position: 'sticky',
-        top: 24,
-        alignSelf: 'start',
-        background: 'white',
-        border: '1px solid #eee',
-        borderRadius: 16,
-        padding: 16,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.06)'
-      }}
-    >
-      <h3 style={{ marginTop: 0, marginBottom: 8 }}>🏆 Leaderboard</h3>
-      <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-        {`Jour: ${dayKey}`}
-      </div>
+    <aside className="leaderboard-aside card section leaderboard">
+      <h3 style={{ marginTop: 0, marginBottom: 6 }}>🏆 Leaderboard</h3>
+      <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>{`Jour: ${dayKey}`}</div>
       {loading && <div>Chargement…</div>}
-      {error && (
-        <div style={{ color: '#dc2626', fontSize: 13 }}>{error}</div>
-      )}
+      {error && <div style={{ color: '#dc2626', fontSize: 13 }}>{error}</div>}
       {!loading && !error && rows.length === 0 && (
         <div style={{ fontSize: 14, opacity: 0.7 }}>(Aucune donnée pour aujourd’hui)</div>
       )}
       {!loading && !error && rows.length > 0 && (
-        <ol style={{ paddingLeft: 18, margin: 0 }}>
-          {rows.map((r) => (
-            <li key={r.userId} style={{ margin: '6px 0' }}>
-              <button
-                onClick={() => onSelectUser?.(r.userId)}
-                title={`Voir le profil de ${r.name}`}
-                style={{
-                  padding: 0,
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#111',
-                  fontWeight: 600,
-                  textDecoration: 'underline',
-                  cursor: 'pointer'
-                }}
-              >
-                {r.name}
-              </button>
-              <span style={{ opacity: 0.7 }}> — {r.attempts} tentative{r.attempts > 1 ? 's' : ''}</span>
-            </li>
+        <div className="lb-list">
+          {rows.map((r, idx) => (
+            <button
+              key={r.userId}
+              type="button"
+              className="lb-row"
+              title={`Voir le profil de ${r.name}`}
+              onClick={() => onSelectUser?.(r.userId)}
+            >
+              <span className={`lb-rank ${idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : ''}`}>{idx + 1}</span>
+              <span className="lb-avatar" aria-hidden>{initialsOf(r.name)}</span>
+              <span className="lb-name">{r.name}</span>
+              <span className="lb-pill">{r.attempts} tentative{r.attempts > 1 ? 's' : ''}</span>
+            </button>
           ))}
-        </ol>
+        </div>
       )}
     </aside>
   );

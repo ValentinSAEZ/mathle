@@ -193,42 +193,23 @@ export default function ProfilePage({ session, userId }) {
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: '20px auto', padding: '0 16px' }}>
-      <h2 style={{ marginTop: 12 }}>Mon profil</h2>
+    <div className="profile-page" style={{ maxWidth: 900, margin: '20px auto', padding: '0 16px' }}>
+      <h2 className="page-title" style={{ marginTop: 12 }}>Mon profil</h2>
 
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1fr',
         gap: 16,
       }}>
-        <section style={{ background: 'white', border: '1px solid #eee', borderRadius: 16, padding: 16 }}>
+        <section className="card section">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-            <div
-              aria-label="Avatar"
-              title={username || 'Utilisateur'}
-              style={{
-                width: 56, height: 56, borderRadius: 9999,
-                background: '#111', color: '#fff',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontWeight: 700, fontSize: 18,
-              }}
-            >
+            <div aria-label="Avatar" title={username || 'Utilisateur'} className="avatar">
               {initials}
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{username || (isSelf ? (selfUser?.email || 'Utilisateur') : 'Utilisateur')}</div>
-                {isAdminTarget && (
-                  <span style={{
-                    display: 'inline-block',
-                    padding: '2px 8px',
-                    borderRadius: 999,
-                    background: '#dc2626',
-                    color: 'white',
-                    fontSize: 12,
-                    fontWeight: 600,
-                  }}>Administrateur</span>
-                )}
+                {isAdminTarget && (<span className="badge-admin">Administrateur</span>)}
               </div>
               <div style={{ fontSize: 12, opacity: 0.7 }}>Série actuelle: {currentStreak} jour{currentStreak > 1 ? 's' : ''}</div>
             </div>
@@ -249,7 +230,7 @@ export default function ProfilePage({ session, userId }) {
               {!editing ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div>{username || '—'}</div>
-                  {isSelf && <button onClick={() => setEditing(true)}>Modifier le profil</button>}
+                  {isSelf && <button className="btn btn-primary" onClick={() => setEditing(true)}>Modifier le profil</button>}
                 </div>
               ) : (
                 <form onSubmit={save} style={{ display: 'flex', gap: 8 }}>
@@ -259,10 +240,11 @@ export default function ProfilePage({ session, userId }) {
                     onChange={(e)=>setUsername(e.target.value)}
                     placeholder="Votre nom d’utilisateur"
                     required
-                    style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1px solid #ddd' }}
+                    className="input"
+                    style={{ flex: 1 }}
                   />
-                  <button type="button" onClick={()=>{ setEditing(false); }} style={{ padding: '8px 12px' }}>Annuler</button>
-                  <button type="submit" disabled={saving} style={{ padding: '8px 12px' }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+                  <button type="button" className="btn" onClick={()=>{ setEditing(false); }}>Annuler</button>
+                  <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
                 </form>
               )}
             </div>
@@ -270,7 +252,7 @@ export default function ProfilePage({ session, userId }) {
           </div>
         </section>
 
-        <section style={{ background: 'white', border: '1px solid #eee', borderRadius: 16, padding: 16 }}>
+        <section className="card section">
           <h3 style={{ marginTop: 0 }}>Jours de complétion</h3>
           <div className="completion-grid">
             {range.map(({ key }, i) => {
@@ -283,16 +265,16 @@ export default function ProfilePage({ session, userId }) {
           </div>
         </section>
 
-        <section style={{ background: 'white', border: '1px solid #eee', borderRadius: 16, padding: 16 }}>
+        <section className="card section">
           <h3 style={{ marginTop: 0 }}>Mode Course — Derniers runs</h3>
           {raceRuns.length === 0 ? (
             <div style={{ fontSize: 14, opacity: 0.7 }}>(Aucun run)</div>
           ) : (
             <div>
               <div style={{ fontSize: 14, marginBottom: 8 }}>Meilleur score: <b>{bestScore}</b></div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              <ul className="list">
                 {raceRuns.map((r, i) => (
-                  <li key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <li key={i} className="list-item">
                     <span style={{ width: 8, height: 8, borderRadius: 99, background: '#111' }} />
                     <span style={{ width: 110, opacity: 0.8 }}>{fmtDate(r.created_at)}</span>
                     <span style={{ width: 90, opacity: 0.8 }}>{r.duration}s • {r.level}</span>

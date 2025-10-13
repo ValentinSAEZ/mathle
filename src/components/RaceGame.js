@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { burstConfetti } from '../lib/celebrate';
 
 // Génère une équation simple selon la difficulté
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
@@ -132,6 +133,8 @@ export default function RaceGame({ session }) {
       // timer fini
       saveRun();
       setRunning(false);
+      // Celebrate the end of a run
+      setTimeout(() => burstConfetti({}), 50);
     }
   }, [timeLeft, running]);
 
@@ -152,10 +155,10 @@ export default function RaceGame({ session }) {
 
   return (
     <div style={{ maxWidth: 900, margin: '20px auto', padding: '0 16px' }}>
-      <h2 style={{ marginTop: 12 }}>🏁 Mode Course — Résous un max d’équations</h2>
+      <h2 className="page-title" style={{ marginTop: 12 }}>🏁 Mode Course — Résous un max d’équations</h2>
 
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr' }}>
-        <section style={{ background: 'white', border: '1px solid #eee', borderRadius: 16, padding: 16 }}>
+        <section className="card section">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
             <label>Durée
               <select value={duration} onChange={(e)=>setDuration(Number(e.target.value))} style={{ marginLeft: 8 }} disabled={running}>
@@ -172,9 +175,9 @@ export default function RaceGame({ session }) {
               </select>
             </label>
             {!running ? (
-              <button onClick={start} style={{ marginLeft: 'auto' }}>Démarrer</button>
+              <button className="btn btn-primary" onClick={start} style={{ marginLeft: 'auto' }}>Démarrer</button>
             ) : (
-              <button onClick={stop} style={{ marginLeft: 'auto' }}>Stop</button>
+              <button className="btn" onClick={stop} style={{ marginLeft: 'auto' }}>Stop</button>
             )}
             <div style={{ marginLeft: 'auto', fontWeight: 600 }}>Temps: {timeFmt}</div>
             <div style={{ fontWeight: 600 }}>Score: {score}</div>
@@ -194,14 +197,15 @@ export default function RaceGame({ session }) {
               onChange={(e)=>setInput(e.target.value)}
               placeholder="Ta réponse"
               disabled={disabled}
-              style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #ddd', fontSize: 18, width: 200 }}
+              className="input"
+              style={{ fontSize: 18, width: 200 }}
             />
-            <button type="submit" disabled={disabled} style={{ padding: '10px 16px', borderRadius: 12, border: 'none', background: '#111', color: 'white' }}>Valider</button>
+            <button type="submit" className="btn btn-primary" disabled={disabled}>Valider</button>
           </form>
 
           {timeLeft <= 0 && (
             <div style={{ marginTop: 12, textAlign: 'center', fontSize: 16 }}>
-              Terminé ⏱️ — Score: <b>{score}</b> (Essais: {attempts})
+              OK ⏱️ — Score: <b>{score}</b> (Essais: {attempts})
             </div>
           )}
           {saveMsg && (
@@ -209,7 +213,7 @@ export default function RaceGame({ session }) {
           )}
         </section>
 
-        <section style={{ background: 'white', border: '1px solid #eee', borderRadius: 16, padding: 16 }}>
+        <section className="card section">
           <h3 style={{ marginTop: 0 }}>Historique récent</h3>
           {history.length === 0 ? (
             <div style={{ fontSize: 14, opacity: 0.7 }}>(Aucune tentative)</div>

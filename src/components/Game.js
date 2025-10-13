@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import riddles from "../data/riddles.json";
 import { supabase } from "../lib/supabaseClient";
+import { burstConfetti, pulseOnce } from "../lib/celebrate";
 
 /** ---------- Utils dates (UTC) ---------- **/
 
@@ -51,6 +52,7 @@ export default function Game({ session }) {
   const [loading, setLoading] = useState(false);
   const [solved, setSolved] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
+  const submitBtnRef = useRef(null);
 
   // Permet une énigme override depuis Supabase
   const [overrideRiddle, setOverrideRiddle] = useState(null);
@@ -311,7 +313,12 @@ export default function Game({ session }) {
         result,
       };
       setHistory((h) => [newEntry, ...h]);
-      if (result === "correct") setSolved(true);
+      if (result === "correct") {
+        setSolved(true);
+        // Celebrate with confetti and a button pulse
+        burstConfetti({ originEl: submitBtnRef.current });
+        pulseOnce(submitBtnRef.current);
+      }
 
       setFeedback(msg);
       setGuess("");
@@ -322,22 +329,21 @@ export default function Game({ session }) {
     }
   };
 
+  const onClickFinished = () => {
+    // Allow replay of celebration when clicking "OK"
+    burstConfetti({ originEl: submitBtnRef.current });
+    pulseOnce(submitBtnRef.current);
+  };
+
   return (
     <div style={{ maxWidth: 760, margin: "80px auto", padding: "0 16px" }}>
-      <h1 style={{ textAlign: "center" }}>🧩 BrainteaserDay — L’énigme du jour</h1>
+      <h1 className="page-title">🧩 BrainteaserDay — L’énigme du jour</h1>
 
       <div style={{ textAlign: "center", margin: "12px 0", fontSize: 14, opacity: 0.8 }}>
         {`Énigme du ${dayKey} (UTC) • Prochaine dans ${timeParts.h}h ${timeParts.m}m ${timeParts.s}s`}
       </div>
 
-      <div
-        style={{
-          padding: 20,
-          borderRadius: 16,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-          background: "white",
-        }}
-      >
+      <div className="card" style={{ padding: 20 }}>
         <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 16 }}>
           {String(riddle.question || '')
             .split(/\n{2,}/)
@@ -355,29 +361,17 @@ export default function Game({ session }) {
             onChange={(e) => setGuess(e.target.value)}
             placeholder="Ta réponse"
             disabled={loading || solved || isBanned}
-            style={{
-              flex: 1,
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #ddd",
-              fontSize: 16,
-              background: (solved || isBanned) ? "#f3f4f6" : "white",
-            }}
+            className="input"
+            style={{ flex: 1, background: (solved || isBanned) ? "#f3f4f6" : "white" }}
           />
           <button
-            type="submit"
-            disabled={loading || solved || isBanned}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 12,
-              border: "none",
-              background: (solved || isBanned) ? "#9ca3af" : "#111",
-              color: "white",
-              fontSize: 16,
-              cursor: (loading || solved || isBanned) ? "not-allowed" : "pointer",
-            }}
+            ref={submitBtnRef}
+            type={solved ? "button" : "submit"}
+            onClick={solved ? onClickFinished : undefined}
+            disabled={loading || isBanned}
+            className={`btn ${solved ? 'btn-finished' : 'btn-primary'}`}
           >
-            {isBanned ? "Banni" : (solved ? "Terminé" : "Valider")}
+            {isBanned ? "Banni" : (solved ? "OK" : "Valider")}
           </button>
         </form>
 
@@ -389,15 +383,7 @@ export default function Game({ session }) {
       </div>
 
       {/* Historique du jour (DB) */}
-      <div
-        style={{
-          marginTop: 18,
-          padding: 16,
-          borderRadius: 16,
-          background: "#f9fafb",
-          border: "1px solid #eee",
-        }}
-      >
+      <div className="card" style={{ marginTop: 18, padding: 16, background: "#f9fafb" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3 style={{ margin: 0 }}>Historique des réponses (aujourd’hui)</h3>
           <div style={{ fontSize: 13, opacity: 0.7 }}>

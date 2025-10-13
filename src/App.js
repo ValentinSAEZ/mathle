@@ -94,34 +94,39 @@ export default function App() {
   return (
     <div>
       <Banner />
-      <div style={{ padding: 12 }}>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          {isAdmin && <button onClick={() => setShowAdmin(true)}>Admin</button>}
-          {!raceSuspended ? (
-            view !== 'race' ? (
-              <button onClick={() => setView('race')}>Mode Course</button>
+      <header className="topbar">
+        <div className="nav-container">
+          <div className="brand" onClick={() => setView('home')} title="Aller à l’accueil">
+            <img
+              className="brand-logo"
+              src="/brand/logo.png"
+              alt="BrainteaserDay"
+              onError={(e) => { e.currentTarget.src = '/logo192.png'; }}
+            />
+            <div className="brand-title">BrainteaserDay</div>
+          </div>
+          <div className="nav-actions">
+            {isAdmin && (
+              <button className="btn btn-soft btn-lg" onClick={() => setShowAdmin(true)}>Admin</button>
+            )}
+            {!raceSuspended ? (
+              view !== 'race' ? (
+                <button className="btn btn-soft btn-lg" onClick={() => setView('race')}>Mode Course</button>
+              ) : (
+                <button className="btn btn-soft btn-lg" onClick={() => setView('home')}>Accueil</button>
+              )
+            ) : null}
+            {view !== 'profile' ? (
+              <button className="btn btn-soft btn-lg" onClick={() => { setProfileUserId(session.user.id); setView('profile'); }}>Profil</button>
             ) : (
-              <button onClick={() => setView('home')}>Accueil</button>
-            )
-          ) : null}
-          {view !== 'profile' ? (
-            <button onClick={() => { setProfileUserId(session.user.id); setView('profile'); }}>Profil</button>
-          ) : (
-            <button onClick={() => setView('home')}>Accueil</button>
-          )}
-          <button onClick={() => supabase.auth.signOut()}>Se déconnecter</button>
+              <button className="btn btn-soft btn-lg" onClick={() => setView('home')}>Accueil</button>
+            )}
+            <button className="btn btn-primary btn-lg" onClick={() => supabase.auth.signOut()}>Se déconnecter</button>
+          </div>
         </div>
-      </div>
+      </header>
       {view === 'home' ? (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 320px',
-            gap: 16,
-            alignItems: 'start',
-            padding: '0 16px'
-          }}
-        >
+        <div className="home-grid">
           <div>
             <Game session={session} />
           </div>
