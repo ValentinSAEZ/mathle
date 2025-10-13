@@ -1,0 +1,17 @@
+[
+  { "id": 1,  "type": "number", "question": "Je suis un nombre à deux chiffres. La somme de mes chiffres vaut 9 et mon unité est le double de ma dizaine.", "answer": 36 },
+  { "id": 2,  "type": "number", "question": "Je suis un carré parfait entre 30 et 40.", "answer": 36 },
+  { "id": 3,  "type": "number", "question": "Trouve n si 2n + 7 = 29.", "answer": 11 },
+  { "id": 4,  "type": "number", "question": "La somme des entiers de 1 à n vaut 55. Trouve n.", "answer": 10 },
+  { "id": 5,  "type": "word",   "question": "Comment s’appelle le polygone à 8 côtés ?", "answer": "octogone" },
+  { "id": 6,  "type": "word",   "question": "Nom de la propriété: a×(b+c) = a×b + a×c.", "answer": "distributivité" },
+  { "id": 7,  "type": "number", "question": "Un prix augmente de 20% puis diminue de 20%. Le pourcentage total de variation ?", "answer": -4 },
+  { "id": 8,  "type": "number", "question": "Quel est le 7e terme de la suite arithmétique u1=3, r=5 ?", "answer": 33 },
+  { "id": 9,  "type": "number", "question": "Aire d’un disque de rayon 3 (π ≈ 3.14) arrondie à l’unité.", "answer": 28 },
+  { "id": 10, "type": "word",   "question": "Nom de la fonction inverse de l’exponentielle.", "answer": "logarithme" },
+  { "id": 11, "type": "number", "question": "Si 3x - 4 = 2x + 11, trouve x.", "answer": 15 },
+  { "id": 12, "type": "number", "question": "PGCD(24, 42) ?", "answer": 6 },
+  { "id": 13, "type": "word",   "question": "Comment s’appelle la somme des angles d’un triangle (en degrés) ?", "answer": "180" },
+  { "id": 14, "type": "number", "question": "Évalue: 2^5 + 3^3.", "answer": 41 },
+  { "id": 15, "type": "word",   "question": "Nom de la moyenne: (somme des valeurs)/(nombre de valeurs).", "answer": "moyenne" }
+]

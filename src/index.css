@@ -11,3 +11,52 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* --- Global banner (marquee) --- */
+.banner-container {
+  width: 100%;
+  background: #111;
+  color: #fff;
+}
+.banner-track {
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  height: 36px;
+  display: flex;
+  align-items: center;
+}
+.banner-marquee {
+  display: inline-block;
+  padding-left: 100%;
+  will-change: transform;
+  animation-name: marquee-left;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes marquee-left {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+/* --- Profile completion grid --- */
+.completion-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 14px);
+  gap: 6px;
+}
+.completion-square {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+.completion-square.solved {
+  background: #16a34a;
+  border-color: #15803d;
+}
+.completion-square.unsolved {
+  background: #ffffff;
+}
