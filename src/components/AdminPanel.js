@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import riddles from '../data/riddles.json';
 
 function getUTCDateKey() {
   const now = new Date();
@@ -38,6 +37,13 @@ export default function AdminPanel({ onClose }) {
   const [raceSaving, setRaceSaving] = useState(false);
   const [raceMsg, setRaceMsg] = useState('');
   const [tab, setTab] = useState('riddle'); // 'riddle' | 'bans' | 'banner'
+
+  // Add riddle form
+  const [addType, setAddType] = useState('word');
+  const [addQ, setAddQ] = useState('');
+  const [addA, setAddA] = useState('');
+  const [addSaving, setAddSaving] = useState(false);
+  const [addMsg, setAddMsg] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -202,6 +208,29 @@ export default function AdminPanel({ onClose }) {
     }
   };
 
+  const addRiddle = async (e) => {
+    e?.preventDefault?.();
+    setAddSaving(true);
+    setAddMsg('');
+    try {
+      const { data, error } = await supabase.rpc('admin_add_riddle', {
+        p_type: addType,
+        p_question: addQ,
+        p_answer: addA,
+      });
+      if (error) throw error;
+      const newId = Array.isArray(data) ? data[0] : data;
+      setAddMsg(`Énigme créée avec l'ID ${newId} ✅`);
+      // Reset form lightly
+      setAddQ(''); setAddA('');
+    } catch (e) {
+      console.error(e);
+      setAddMsg("Échec de la création de l'énigme");
+    } finally {
+      setAddSaving(false);
+    }
+  };
+
   return (
     <div
       role="dialog"
@@ -220,6 +249,7 @@ export default function AdminPanel({ onClose }) {
         <div className="tabs">
           {[
             { id: 'riddle', label: `Énigme du jour (${dayKey})` },
+            { id: 'riddles', label: 'Énigmes' },
             { id: 'bans', label: 'Bannis' },
             { id: 'banner', label: 'Bandeau' },
             { id: 'race', label: 'Course' },
@@ -235,11 +265,11 @@ export default function AdminPanel({ onClose }) {
               <form onSubmit={saveOverride} style={{ display: 'grid', gap: 12 }}>
                 <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr', }}>
                   <label style={{ fontSize: 14 }}>
-                    Riddle JSON id (optionnel)
+                    ID d’énigme (optionnel)
                     <input className="input" type="number" value={rid} onChange={(e)=>setRid(e.target.value)} placeholder="ex: 5" style={{ width: '100%', marginTop: 4 }} />
                   </label>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    Laisser vide pour utiliser la question personnalisée ci-dessous, sinon l'id JSON sera prioritaire.
+                    Laisser vide pour utiliser la question personnalisée ci-dessous, sinon l'ID d’énigme serveur sera prioritaire.
                   </div>
                 </div>
                 <div style={{ display: 'grid', gap: 12 }}>
@@ -286,6 +316,36 @@ export default function AdminPanel({ onClose }) {
                   <button type="button" className="btn" onClick={unban} disabled={banning}>Débannir</button>
                 </div>
                 {banMsg && <div style={{ fontSize: 14 }}>{banMsg}</div>}
+              </form>
+            </section>
+          )}
+
+          {tab === 'riddles' && (
+            <section>
+              <form onSubmit={addRiddle} style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <label style={{ fontSize: 14 }}>
+                    Question
+                    <textarea className="input" value={addQ} onChange={(e)=>setAddQ(e.target.value)} rows={4} placeholder="Saisir une question..." style={{ width: '100%', marginTop: 4 }}/>
+                  </label>
+                  <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '150px 1fr' }}>
+                    <label style={{ fontSize: 14 }}>
+                      Type
+                      <select className="input" value={addType} onChange={(e)=>setAddType(e.target.value)} style={{ display: 'block', marginTop: 4 }}>
+                        <option value="word">word</option>
+                        <option value="number">number</option>
+                      </select>
+                    </label>
+                    <label style={{ fontSize: 14 }}>
+                      Réponse
+                      <input className="input" type="text" value={addA} onChange={(e)=>setAddA(e.target.value)} placeholder="ex: 36 ou 'octogone'" style={{ width: '100%', marginTop: 4 }} />
+                    </label>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button type="submit" className="btn btn-primary" disabled={addSaving}>{addSaving ? 'Création…' : 'Ajouter l’énigme'}</button>
+                </div>
+                {addMsg && <div style={{ fontSize: 14 }}>{addMsg}</div>}
               </form>
             </section>
           )}

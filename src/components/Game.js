@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import riddles from "../data/riddles.json";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { burstConfetti, pulseOnce } from "../lib/celebrate";
 
@@ -54,21 +53,12 @@ export default function Game({ session }) {
   const [isBanned, setIsBanned] = useState(false);
   const submitBtnRef = useRef(null);
 
-  // Permet une énigme override depuis Supabase
-  const [overrideRiddle, setOverrideRiddle] = useState(null);
-  const [overrideRiddleId, setOverrideRiddleId] = useState(null);
+  // Énigme chargée depuis le serveur (intègre les overrides côté DB)
+  // { riddle_id, type, question }
+  const [riddle, setRiddle] = useState(null);
+  const [riddleLoading, setRiddleLoading] = useState(false);
 
   const dayKey = getUTCDateKey();
-
-  // Choix déterministe de l'énigme du jour (UTC)
-  const { riddle: defaultRiddle, riddleIndex: defaultRiddleIndex } = useMemo(() => {
-    const idx = stringHash(dayKey) % riddles.length;
-    return { riddle: riddles[idx], riddleIndex: idx };
-  }, [dayKey]);
-
-  // Riddle effectif (override si présent)
-  const riddle = overrideRiddle || defaultRiddle;
-  const riddleIndex = overrideRiddleId ?? defaultRiddleIndex;
 
   // Compte à rebours vers minuit UTC
   useEffect(() => {
@@ -122,101 +112,41 @@ export default function Game({ session }) {
     setGuess("");
   }, [loadHistory, dayKey]);
 
-  // Charger une éventuelle override d'énigme (jour courant) + poll périodique
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('riddle_overrides')
-          .select('riddle_id, question, answer, type')
-          .eq('day_key', dayKey)
-          .maybeSingle();
-        if (error) throw error;
-        if (!mounted) return;
-        if (!data) {
-          setOverrideRiddle(null);
-          setOverrideRiddleId(null);
-          return;
-        }
-        if (data.riddle_id != null) {
-          const match = riddles.find((r) => Number(r.id) === Number(data.riddle_id));
-          if (match) {
-            setOverrideRiddle(match);
-            setOverrideRiddleId(match.id);
-            return;
-          }
-        }
-        if (data.question && data.type && (data.answer ?? '') !== '') {
-          const custom = {
-            type: data.type,
-            question: data.question,
-            answer: data.type === 'number' ? Number(data.answer) : String(data.answer),
-          };
-          setOverrideRiddle(custom);
-          setOverrideRiddleId(-1);
-        } else {
-          setOverrideRiddle(null);
-          setOverrideRiddleId(null);
-        }
-      } catch (e) {
-        // En cas d'erreur (table absente/RLS), ignorer l'override
-        setOverrideRiddle(null);
-        setOverrideRiddleId(null);
-      }
-    };
-    load();
-    const t = setInterval(load, 15000);
-    return () => { mounted = false; clearInterval(t); };
+  // Charger l'énigme du jour depuis Supabase (inclut override serveur)
+  const loadRiddle = useCallback(async () => {
+    setRiddleLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('get_daily_riddle', { p_day: dayKey });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      setRiddle(row || null);
+    } catch (e) {
+      console.error(e);
+      setRiddle(null);
+    } finally {
+      setRiddleLoading(false);
+    }
   }, [dayKey]);
 
-  // Recharger l'historique si override change (p.ex. après reset par admin)
   useEffect(() => {
-    loadHistory();
-  }, [overrideRiddleId]);
+    loadRiddle();
+  }, [loadRiddle]);
 
-  // Réagit immédiatement à un override déclenché par l'admin (événement local)
+  // Se mettre à jour immédiatement lors d'un override (événement local depuis AdminPanel)
   useEffect(() => {
     const handler = (e) => {
       const dk = e?.detail?.dayKey;
       if (dk && dk !== dayKey) return;
-      // Débloque immédiatement l'UI localement
       setSolved(false);
       setFeedback("");
       setGuess("");
       setHistory([]);
-      // Recharge override et historique depuis la DB
-      (async () => {
-        try {
-          const { data } = await supabase
-            .from('riddle_overrides')
-            .select('riddle_id, question, answer, type')
-            .eq('day_key', dayKey)
-            .maybeSingle();
-          if (!data) {
-            setOverrideRiddle(null);
-            setOverrideRiddleId(null);
-          } else if (data.riddle_id != null) {
-            const match = riddles.find((r) => Number(r.id) === Number(data.riddle_id));
-            if (match) { setOverrideRiddle(match); setOverrideRiddleId(match.id); }
-          } else if (data.question && data.type && (data.answer ?? '') !== '') {
-            setOverrideRiddle({
-              type: data.type,
-              question: data.question,
-              answer: data.type === 'number' ? Number(data.answer) : String(data.answer),
-            });
-            setOverrideRiddleId(-1);
-          } else {
-            setOverrideRiddle(null);
-            setOverrideRiddleId(null);
-          }
-        } catch {}
-        await loadHistory();
-      })();
+      loadRiddle();
+      loadHistory();
     };
     window.addEventListener('mathle:override-updated', handler);
     return () => window.removeEventListener('mathle:override-updated', handler);
-  }, [dayKey, loadHistory]);
+  }, [dayKey, loadRiddle, loadHistory]);
 
   // Vérifier si l'utilisateur est banni
   useEffect(() => {
@@ -254,78 +184,41 @@ export default function Game({ session }) {
       return;
     }
 
-    let result = "wrong";
-    let msg = "";
-
-    if (riddle.type === "number") {
-      const g = Number(guess);
-      if (Number.isNaN(g)) {
-        setFeedback("Entre un nombre 😉");
-        return;
-      }
-      const ans = Number(riddle.answer);
-      if (g === ans) {
-        result = "correct";
-        msg = "🎉 Bravo, bonne réponse !";
-      } else if (g < ans) {
-        result = "low";
-        msg = "Trop petit !";
-      } else {
-        result = "high";
-        msg = "Trop grand !";
-      }
-    } else if (riddle.type === "word") {
-      const g = normalize(guess);
-      const ans = normalize(String(riddle.answer));
-      if (g === ans) {
-        result = "correct";
-        msg = "🎉 Bravo, bonne réponse !";
-      } else {
-        result = "wrong";
-        // indice simple après 3 essais
-        const attemptsSoFar = history.length + 1;
-        if (attemptsSoFar >= 3 && ans.length > 0) {
-          msg = `Ce n’est pas ça… Indice: ça commence par “${ans[0]}”`;
-        } else {
-          msg = "Ce n’est pas ça… réessaie !";
-        }
-      }
-    } else {
-      msg = "Type d’énigme non géré (à ajouter).";
-    }
-
-    // Insertion en base (persistée)
+    // Validation côté serveur via RPC (qui enregistre aussi l'essai)
     try {
-      const payload = {
-        day_key: dayKey,                        // stocké en date (UTC) côté DB
-        riddle_id: riddle.id ?? riddleIndex,    // garde l'id si présent, sinon index
-        // Si la colonne "guess" est numérique côté DB, envoyer un nombre; sinon, envoyer une chaîne
-        guess: riddle.type === "number" ? Number(guess) : String(guess),
-        result,
-      };
-      const { error } = await supabase.from("attempts").insert(payload);
-      if (error) throw error;
+      if (!riddle) return;
+      if (riddle.type === 'number') {
+        const g = Number(guess);
+        if (Number.isNaN(g)) { setFeedback('Entre un nombre 😉'); return; }
+      }
 
-      // Optimistic update local
-      const newEntry = {
-        t: new Date().toISOString(),
-        guess: String(guess),
-        result,
-      };
+      const { data, error } = await supabase.rpc('submit_guess', {
+        p_day: dayKey,
+        p_guess: String(guess),
+      });
+      if (error) throw error;
+      const result = typeof data === 'string' ? data : String(data || 'wrong');
+
+      let msg = '';
+      if (result === 'correct') msg = '🎉 Bravo, bonne réponse !';
+      else if (result === 'low') msg = 'Trop petit !';
+      else if (result === 'high') msg = 'Trop grand !';
+      else msg = 'Ce n’est pas ça… réessaie !';
+
+      // Optimistic update local (le serveur a déjà inséré la tentative)
+      const newEntry = { t: new Date().toISOString(), guess: String(guess), result };
       setHistory((h) => [newEntry, ...h]);
-      if (result === "correct") {
+      if (result === 'correct') {
         setSolved(true);
-        // Celebrate with confetti and a button pulse
         burstConfetti({ originEl: submitBtnRef.current });
         pulseOnce(submitBtnRef.current);
       }
-
       setFeedback(msg);
-      setGuess("");
+      setGuess('');
     } catch (e) {
       console.error(e);
-      const msgDetail = e?.message || e?.error_description || e?.hint || "";
-      setFeedback(`Erreur lors de l’enregistrement de ta réponse.${msgDetail ? " " + msgDetail : ""}`);
+      const msgDetail = e?.message || e?.error_description || e?.hint || '';
+      setFeedback(`Erreur lors de l’enregistrement de ta réponse.${msgDetail ? ' ' + msgDetail : ''}`);
     }
   };
 
@@ -345,13 +238,17 @@ export default function Game({ session }) {
 
       <div className="card" style={{ padding: 20 }}>
         <div style={{ fontSize: 18, lineHeight: 1.5, marginBottom: 16 }}>
-          {String(riddle.question || '')
+          {riddleLoading && <span>Chargement de l’énigme…</span>}
+          {!riddleLoading && riddle && String(riddle.question || '')
             .split(/\n{2,}/)
             .map((para, i) => (
               <p key={i} style={{ margin: '0 0 12px 0', whiteSpace: 'pre-line' }}>
                 {para}
               </p>
             ))}
+          {!riddleLoading && !riddle && (
+            <span>Énigme indisponible pour le moment.</span>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", gap: 8 }}>
@@ -360,7 +257,7 @@ export default function Game({ session }) {
             value={guess}
             onChange={(e) => setGuess(e.target.value)}
             placeholder="Ta réponse"
-            disabled={loading || solved || isBanned}
+            disabled={loading || solved || isBanned || riddleLoading || !riddle}
             className="input"
             style={{ flex: 1, background: (solved || isBanned) ? "#f3f4f6" : "white" }}
           />
@@ -368,7 +265,7 @@ export default function Game({ session }) {
             ref={submitBtnRef}
             type={solved ? "button" : "submit"}
             onClick={solved ? onClickFinished : undefined}
-            disabled={loading || isBanned}
+            disabled={loading || isBanned || riddleLoading || !riddle}
             className={`btn ${solved ? 'btn-finished' : 'btn-primary'}`}
           >
             {isBanned ? "Banni" : (solved ? "OK" : "Valider")}
