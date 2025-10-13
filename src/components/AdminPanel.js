@@ -213,10 +213,24 @@ export default function AdminPanel({ onClose }) {
     setAddSaving(true);
     setAddMsg('');
     try {
+      if (addType === 'number') {
+        const normalized = (addA ?? '').toString().replace(',', '.').trim();
+        if (!normalized || Number.isNaN(Number(normalized))) {
+          setAddMsg("Réponse numérique invalide (ex: 36 ou 12.5)");
+          setAddSaving(false);
+          return;
+        }
+      } else {
+        if (!addA || !addA.toString().trim()) {
+          setAddMsg("Réponse requise pour le type 'word'");
+          setAddSaving(false);
+          return;
+        }
+      }
       const { data, error } = await supabase.rpc('admin_add_riddle', {
         p_type: addType,
         p_question: addQ,
-        p_answer: addA,
+        p_answer: addType === 'number' ? (addA ?? '').toString().replace(',', '.') : addA,
       });
       if (error) throw error;
       const newId = Array.isArray(data) ? data[0] : data;
@@ -225,7 +239,8 @@ export default function AdminPanel({ onClose }) {
       setAddQ(''); setAddA('');
     } catch (e) {
       console.error(e);
-      setAddMsg("Échec de la création de l'énigme");
+      const detail = e?.message || e?.error?.message || e?.hint || e?.details || '';
+      setAddMsg(`Échec de la création de l'énigme${detail ? ' — ' + detail : ''}`);
     } finally {
       setAddSaving(false);
     }
