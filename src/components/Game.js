@@ -57,6 +57,7 @@ export default function Game({ session }) {
   // { riddle_id, type, question }
   const [riddle, setRiddle] = useState(null);
   const [riddleLoading, setRiddleLoading] = useState(false);
+  const [riddleError, setRiddleError] = useState('');
 
   const dayKey = getUTCDateKey();
 
@@ -120,9 +121,12 @@ export default function Game({ session }) {
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       setRiddle(row || null);
+      setRiddleError('');
     } catch (e) {
       console.error(e);
       setRiddle(null);
+      const detail = e?.message || e?.error?.message || e?.hint || e?.details || '';
+      setRiddleError(detail || 'Échec de chargement de l’énigme');
     } finally {
       setRiddleLoading(false);
     }
@@ -247,7 +251,12 @@ export default function Game({ session }) {
               </p>
             ))}
           {!riddleLoading && !riddle && (
-            <span>Énigme indisponible pour le moment.</span>
+            <div>
+              <div>Énigme indisponible pour le moment.</div>
+              {riddleError && (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#dc2626' }}>Détail: {riddleError}</div>
+              )}
+            </div>
           )}
         </div>
 

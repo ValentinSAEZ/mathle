@@ -104,7 +104,8 @@ export default function AdminPanel({ onClose }) {
       window.dispatchEvent(new CustomEvent('mathle:override-updated', { detail: { dayKey } }));
     } catch (e) {
       console.error(e);
-      setOverrideMsg("Échec de l'enregistrement de l'override");
+      const detail = e?.message || e?.error?.message || e?.hint || e?.details || '';
+      setOverrideMsg(`Échec de l'enregistrement de l'override${detail ? ' — ' + detail : ''}`);
     } finally {
       setSavingOverride(false);
     }
@@ -122,7 +123,8 @@ export default function AdminPanel({ onClose }) {
       window.dispatchEvent(new CustomEvent('mathle:override-updated', { detail: { dayKey } }));
     } catch (e) {
       console.error(e);
-      setOverrideMsg("Impossible de supprimer l'override");
+      const detail = e?.message || e?.error?.message || e?.hint || e?.details || '';
+      setOverrideMsg(`Impossible de supprimer l'override${detail ? ' — ' + detail : ''}`);
     } finally {
       setSavingOverride(false);
     }
