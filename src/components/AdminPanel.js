@@ -1,6 +1,99 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
+function ScheduleForm() {
+  const [date, setDate] = useState('');
+  const [rid, setRid] = useState('');
+  const [q, setQ] = useState('');
+  const [t, setT] = useState('word');
+  const [a, setA] = useState('');
+  const [exp, setExp] = useState('');
+  const [msg, setMsg] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    setMsg(''); setSaving(true);
+    try {
+      if (!date) { setMsg('Date requise'); setSaving(false); return; }
+      const payload = {
+        p_day: date,
+        p_riddle_id: rid ? Number(rid) : null,
+        p_question: q || null,
+        p_type: q ? t : null,
+        p_answer: q ? a : null,
+        p_explanation: exp || null,
+      };
+      const { error } = await supabase.rpc('admin_set_schedule', payload);
+      if (error) throw error;
+      setMsg('Calendrier enregistré ✅');
+    } catch (e) {
+      console.error(e);
+      const d = e?.message || e?.error?.message || e?.details || '';
+      setMsg(`Échec — ${d}`);
+    } finally { setSaving(false); }
+  };
+
+  const clear = async () => {
+    setMsg(''); setSaving(true);
+    try {
+      if (!date) { setMsg('Date requise'); setSaving(false); return; }
+      const { error } = await supabase.rpc('admin_clear_schedule', { p_day: date });
+      if (error) throw error;
+      setMsg('Planification supprimée ✅');
+      setRid(''); setQ(''); setA(''); setT('word'); setExp('');
+    } catch (e) {
+      console.error(e);
+      const d = e?.message || e?.error?.message || e?.details || '';
+      setMsg(`Échec — ${d}`);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
+      <label style={{ fontSize: 14 }}>
+        Date (UTC)
+        <input className="input" type="date" value={date} onChange={(e)=>setDate(e.target.value)} style={{ width: '100%', marginTop: 4 }} />
+      </label>
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr' }}>
+        <label style={{ fontSize: 14 }}>
+          ID d’énigme (optionnel)
+          <input className="input" type="number" value={rid} onChange={(e)=>setRid(e.target.value)} placeholder="ex: 5" style={{ width: '100%', marginTop: 4 }} />
+        </label>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>
+          Laisser vide pour une question personnalisée, sinon l’ID serveur sera prioritaire.
+        </div>
+      </div>
+      <label style={{ fontSize: 14 }}>
+        Question personnalisée (optionnel)
+        <textarea className="input" value={q} onChange={(e)=>setQ(e.target.value)} rows={4} placeholder="Saisir une question..." style={{ width: '100%', marginTop: 4 }}/>
+      </label>
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '150px 1fr' }}>
+        <label style={{ fontSize: 14 }}>
+          Type
+          <select className="input" value={t} onChange={(e)=>setT(e.target.value)} style={{ display: 'block', marginTop: 4 }}>
+            <option value="word">word</option>
+            <option value="number">number</option>
+          </select>
+        </label>
+        <label style={{ fontSize: 14 }}>
+          Réponse
+          <input className="input" type="text" value={a} onChange={(e)=>setA(e.target.value)} placeholder="ex: 36" style={{ width: '100%', marginTop: 4 }} />
+        </label>
+      </div>
+      <label style={{ fontSize: 14 }}>
+        Explication (optionnel)
+        <textarea className="input" value={exp} onChange={(e)=>setExp(e.target.value)} rows={4} placeholder="Ajoutez une explication..." style={{ width: '100%', marginTop: 4 }}/>
+      </label>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button type="button" className="btn" onClick={clear} disabled={saving}>Supprimer</button>
+        <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+      </div>
+      {msg && <div style={{ fontSize: 14 }}>{msg}</div>}
+    </form>
+  );
+}
+
 function getUTCDateKey() {
   const now = new Date();
   const yyyy = now.getUTCFullYear();
@@ -17,6 +110,7 @@ export default function AdminPanel({ onClose }) {
   const [q, setQ] = useState('');
   const [a, setA] = useState('');
   const [t, setT] = useState('word');
+  const [exp, setExp] = useState('');
   const [savingOverride, setSavingOverride] = useState(false);
   const [overrideMsg, setOverrideMsg] = useState('');
 
@@ -36,12 +130,13 @@ export default function AdminPanel({ onClose }) {
   const [raceSuspended, setRaceSuspended] = useState(false);
   const [raceSaving, setRaceSaving] = useState(false);
   const [raceMsg, setRaceMsg] = useState('');
-  const [tab, setTab] = useState('riddle'); // 'riddle' | 'bans' | 'banner'
+  const [tab, setTab] = useState('riddle'); // 'riddle' | 'bans' | 'banner' | 'race' | 'riddles' | 'schedule'
 
   // Add riddle form
   const [addType, setAddType] = useState('word');
   const [addQ, setAddQ] = useState('');
   const [addA, setAddA] = useState('');
+  const [addExp, setAddExp] = useState('');
   const [addSaving, setAddSaving] = useState(false);
   const [addMsg, setAddMsg] = useState('');
 
@@ -97,6 +192,7 @@ export default function AdminPanel({ onClose }) {
         p_question: q || null,
         p_type: q ? t : null,
         p_answer: q ? a : null,
+        p_explanation: exp || null,
       });
       if (error) throw error;
       setOverrideMsg('Override enregistré et leaderboard réinitialisé ✅');
@@ -118,7 +214,7 @@ export default function AdminPanel({ onClose }) {
       const { error } = await supabase.rpc('admin_clear_riddle', { p_day: dayKey });
       if (error) throw error;
       setOverrideMsg('Override supprimé et leaderboard réinitialisé ✅');
-      setRid(''); setQ(''); setA(''); setT('word');
+      setRid(''); setQ(''); setA(''); setT('word'); setExp('');
       // Notifie l'UI pour rafraîchir instantanément
       window.dispatchEvent(new CustomEvent('mathle:override-updated', { detail: { dayKey } }));
     } catch (e) {
@@ -233,12 +329,13 @@ export default function AdminPanel({ onClose }) {
         p_type: addType,
         p_question: addQ,
         p_answer: addType === 'number' ? (addA ?? '').toString().replace(',', '.') : addA,
+        p_explanation: addExp || null,
       });
       if (error) throw error;
       const newId = Array.isArray(data) ? data[0] : data;
       setAddMsg(`Énigme créée avec l'ID ${newId} ✅`);
       // Reset form lightly
-      setAddQ(''); setAddA('');
+      setAddQ(''); setAddA(''); setAddExp('');
     } catch (e) {
       console.error(e);
       const detail = e?.message || e?.error?.message || e?.hint || e?.details || '';
@@ -270,6 +367,7 @@ export default function AdminPanel({ onClose }) {
             { id: 'bans', label: 'Bannis' },
             { id: 'banner', label: 'Bandeau' },
             { id: 'race', label: 'Course' },
+            { id: 'schedule', label: 'Calendrier' },
           ].map(ti => (
             <button key={ti.id} className={`tab ${tab === ti.id ? 'active' : ''}`} onClick={() => setTab(ti.id)}>{ti.label}</button>
           ))}
@@ -307,6 +405,10 @@ export default function AdminPanel({ onClose }) {
                       <input className="input" type="text" value={a} onChange={(e)=>setA(e.target.value)} placeholder="ex: 36" style={{ width: '100%', marginTop: 4 }} />
                     </label>
                   </div>
+                  <label style={{ fontSize: 14 }}>
+                    Explication (optionnel)
+                    <textarea className="input" value={exp} onChange={(e)=>setExp(e.target.value)} rows={4} placeholder="Ajoutez une explication..." style={{ width: '100%', marginTop: 4 }}/>
+                  </label>
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button type="button" className="btn" onClick={clearOverride} disabled={savingOverride}>Supprimer l'override</button>
@@ -358,6 +460,10 @@ export default function AdminPanel({ onClose }) {
                       <input className="input" type="text" value={addA} onChange={(e)=>setAddA(e.target.value)} placeholder="ex: 36 ou 'octogone'" style={{ width: '100%', marginTop: 4 }} />
                     </label>
                   </div>
+                  <label style={{ fontSize: 14 }}>
+                    Explication (optionnel)
+                    <textarea className="input" value={addExp} onChange={(e)=>setAddExp(e.target.value)} rows={4} placeholder="Ajoutez une explication pour l’archive..." style={{ width: '100%', marginTop: 4 }}/>
+                  </label>
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button type="submit" className="btn btn-primary" disabled={addSaving}>{addSaving ? 'Création…' : 'Ajouter l’énigme'}</button>
@@ -398,6 +504,12 @@ export default function AdminPanel({ onClose }) {
                 </div>
                 {raceMsg && <div style={{ fontSize: 14 }}>{raceMsg}</div>}
               </form>
+            </section>
+          )}
+
+          {tab === 'schedule' && (
+            <section>
+              <ScheduleForm />
             </section>
           )}
         </div>

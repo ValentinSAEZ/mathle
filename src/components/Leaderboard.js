@@ -32,33 +32,17 @@ export default function Leaderboard({ onSelectUser }) {
       setLoading(true);
       setError('');
       try {
-        // Use RPC aggregated on server for today's leaderboard
-        const { data, error } = await supabase
-          .rpc('get_leaderboard_today');
-
+        // Server-side leaderboard with usernames (privacy + fewer roundtrips)
+        const { data, error } = await supabase.rpc('get_leaderboard_today_full');
         if (error) throw error;
 
-        const counts = new Map((data || []).map(r => [r.user_id, r.attempts]));
-
-        const userIds = Array.from(counts.keys());
-        let namesById = new Map();
-        if (userIds.length > 0) {
-          try {
-            const { data: profs, error: errProfiles } = await supabase
-              .from('profiles')
-              .select('id, username')
-              .in('id', userIds);
-            if (!errProfiles && Array.isArray(profs)) {
-              namesById = new Map(profs.map(p => [p.id, p.username || '']));
-            }
-          } catch {}
-        }
-
-        const items = userIds
-          .map((uid) => ({
-            userId: uid,
-            name: namesById.get(uid) || `Utilisateur ${String(uid).slice(0, 8)}…`,
-            attempts: counts.get(uid) || 0,
+        const arr = Array.isArray(data) ? data : (data ? [data] : []);
+        const items = arr
+          .map((r) => ({
+            userId: r.user_id,
+            name: (r.username && String(r.username).trim()) || `Utilisateur ${String(r.user_id || '').slice(0, 8)}…`,
+            attempts: r.attempts || 0,
+            tts: r.time_to_solve_seconds ?? null,
           }))
           .sort((a, b) => a.attempts - b.attempts || a.name.localeCompare(b.name))
           .slice(0, 10);
@@ -102,6 +86,11 @@ export default function Leaderboard({ onSelectUser }) {
               <span className="lb-avatar" aria-hidden>{initialsOf(r.name)}</span>
               <span className="lb-name">{r.name}</span>
               <span className="lb-pill">{r.attempts} tentative{r.attempts > 1 ? 's' : ''}</span>
+              {r.tts != null && (
+                <span className="lb-pill" title="Temps jusqu’à la bonne réponse">
+                  ⏱️ {Math.floor(r.tts/60)}:{String(Math.floor(r.tts%60)).padStart(2,'0')}
+                </span>
+              )}
             </button>
           ))}
         </div>

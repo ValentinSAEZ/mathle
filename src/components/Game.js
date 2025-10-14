@@ -23,23 +23,10 @@ function msUntilNextUTCMidnight() {
   return next - now;
 }
 
-/** ---------- Utils jeu ---------- **/
-
-function stringHash(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = (h << 5) - h + str.charCodeAt(i);
-    h |= 0;
-  }
-  return Math.abs(h);
-}
-
-const normalize = (s) =>
-  s
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "");
+/** ---------- Prefers reduced motion ---------- **/
+const prefersReducedMotion = () => {
+  try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+};
 
 /** ---------- Composant principal ---------- **/
 
@@ -58,6 +45,8 @@ export default function Game({ session }) {
   const [riddle, setRiddle] = useState(null);
   const [riddleLoading, setRiddleLoading] = useState(false);
   const [riddleError, setRiddleError] = useState('');
+  const [shareMsg, setShareMsg] = useState('');
+  const [awardsToday, setAwardsToday] = useState([]);
 
   const dayKey = getUTCDateKey();
 
@@ -160,10 +149,10 @@ export default function Game({ session }) {
       try {
         const { data } = await supabase
           .from('bans')
-          .select('user_id')
+          .select('banned')
           .eq('user_id', session.user.id)
           .maybeSingle();
-        if (mounted) setIsBanned(Boolean(data));
+        if (mounted) setIsBanned(Boolean(data?.banned));
       } catch (e) {
         if (mounted) setIsBanned(false);
       }
@@ -214,21 +203,50 @@ export default function Game({ session }) {
       setHistory((h) => [newEntry, ...h]);
       if (result === 'correct') {
         setSolved(true);
-        burstConfetti({ originEl: submitBtnRef.current });
+        if (!prefersReducedMotion()) burstConfetti({ originEl: submitBtnRef.current });
         pulseOnce(submitBtnRef.current);
+        // Compose share message
+        try {
+          const attempts = (history?.length || 0) + 1;
+          const day = dayKey;
+          const bar = [...[...history].reverse(), { result: 'correct' }]
+            .map(h => h.result === 'correct' ? '🟩' : (h.result === 'low' ? '🔵' : (h.result === 'high' ? '🔴' : '⬜')))
+            .join('');
+          const url = `${window.location.origin}/archive?day=${day}`;
+          const text = `BrainteaserDay ${day} — ${attempts} essai${attempts>1?'s':''}\n${bar}\n${url}`;
+          setShareMsg(text);
+        } catch {}
+
+        // Fetch achievements awarded today
+        try {
+          const { data: awd } = await supabase.rpc('get_awards_for_day', { p_day: dayKey });
+          if (Array.isArray(awd)) setAwardsToday(awd);
+        } catch {}
       }
       setFeedback(msg);
       setGuess('');
     } catch (e) {
       console.error(e);
-      const msgDetail = e?.message || e?.error_description || e?.hint || '';
-      setFeedback(`Erreur lors de l’enregistrement de ta réponse.${msgDetail ? ' ' + msgDetail : ''}`);
+      const raw = (e?.message || e?.error?.message || e?.error_description || e?.hint || e?.details || '').toLowerCase();
+      if (raw.includes('rate') && raw.includes('limit')) {
+        setFeedback('Trop d’essais, réessaie dans quelques secondes.');
+      } else if (raw.includes('already') && raw.includes('solv')) {
+        setSolved(true);
+        setFeedback('Tu as déjà résolu l’énigme du jour 🎉');
+      } else if (raw.includes('banned')) {
+        setIsBanned(true);
+        setFeedback('Ton compte est banni. Contacte un administrateur.');
+      } else if (raw.includes('guess') && raw.includes('required')) {
+        setFeedback('Entre une réponse 😉');
+      } else {
+        setFeedback('Erreur lors de l’enregistrement de ta réponse. Réessaie.');
+      }
     }
   };
 
   const onClickFinished = () => {
     // Allow replay of celebration when clicking "OK"
-    burstConfetti({ originEl: submitBtnRef.current });
+    if (!prefersReducedMotion()) burstConfetti({ originEl: submitBtnRef.current });
     pulseOnce(submitBtnRef.current);
   };
 
@@ -268,7 +286,7 @@ export default function Game({ session }) {
             placeholder="Ta réponse"
             disabled={loading || solved || isBanned || riddleLoading || !riddle}
             className="input"
-            style={{ flex: 1, background: (solved || isBanned) ? "#f3f4f6" : "white" }}
+            style={{ flex: 1, background: (solved || isBanned) ? "var(--input-disabled-bg)" : "var(--input-bg)" }}
           />
           <button
             ref={submitBtnRef}
@@ -281,6 +299,31 @@ export default function Game({ session }) {
           </button>
         </form>
 
+        {solved && shareMsg && (
+          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={async ()=>{ try { await navigator.clipboard.writeText(shareMsg); setFeedback('Résultat copié 📋'); } catch { setFeedback('Impossible de copier'); } }}
+            >
+              Partager le résultat
+            </button>
+            <a className="btn" href={`/archive?day=${dayKey}`}>
+              Voir l’archive du jour
+            </a>
+          </div>
+        )}
+
+        {solved && awardsToday && awardsToday.length > 0 && (
+          <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {awardsToday.map((a, i) => (
+              <span key={`${a.key}-${i}`} className="lb-pill" title={a.title || a.key}>
+                🏅 {a.title || a.key}
+              </span>
+            ))}
+          </div>
+        )}
+
         {feedback && (
           <div style={{ marginTop: 16, fontSize: 16 }}>
             {feedback}
@@ -289,7 +332,7 @@ export default function Game({ session }) {
       </div>
 
       {/* Historique du jour (DB) */}
-      <div className="card" style={{ marginTop: 18, padding: 16, background: "#f9fafb" }}>
+      <div className="card" style={{ marginTop: 18, padding: 16, background: "var(--surface-subtle)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3 style={{ margin: 0 }}>Historique des réponses (aujourd’hui)</h3>
           <div style={{ fontSize: 13, opacity: 0.7 }}>
@@ -312,8 +355,8 @@ export default function Game({ session }) {
                   gap: 10,
                   padding: "10px 12px",
                   marginBottom: 8,
-                  background: "white",
-                  border: "1px solid #eee",
+                  background: "var(--card-bg)",
+                  border: "1px solid var(--card-border)",
                   borderRadius: 12,
                 }}
               >

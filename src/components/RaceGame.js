@@ -133,8 +133,9 @@ export default function RaceGame({ session }) {
       // timer fini
       saveRun();
       setRunning(false);
-      // Celebrate the end of a run
-      setTimeout(() => burstConfetti({}), 50);
+      // Celebrate the end of a run (respect reduced motion)
+      const prefersReduced = (() => { try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } })();
+      if (!prefersReduced) setTimeout(() => burstConfetti({}), 50);
     }
   }, [timeLeft, running]);
 

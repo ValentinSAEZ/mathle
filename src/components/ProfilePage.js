@@ -39,6 +39,7 @@ export default function ProfilePage({ session, userId }) {
 
   const [solvedMap, setSolvedMap] = useState(() => new Map()); // key: yyyy-mm-dd -> true/false
   const [raceRuns, setRaceRuns] = useState([]); // [{created_at,duration,level,score,attempts}]
+  const [achievements, setAchievements] = useState([]);
   const bestScore = useMemo(() => (raceRuns.length ? Math.max(...raceRuns.map(r=>r.score||0)) : 0), [raceRuns]);
   const days = 42; // 6 semaines (~42 jours)
   const end = useMemo(() => startOfUTCDay(new Date()), []);
@@ -171,6 +172,30 @@ export default function ProfilePage({ session, userId }) {
     return () => { mounted = false; };
   }, [targetUserId]);
 
+  // Charger succès/badges
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!targetUserId) return;
+      try {
+        const { data, error } = await supabase.rpc('get_user_achievements', { p_user: targetUserId });
+        if (error) throw error;
+        if (mounted) setAchievements(Array.isArray(data) ? data : []);
+      } catch (e) {
+        try {
+          const { data } = await supabase
+            .from('user_achievements')
+            .select('key, day_key, earned_at')
+            .eq('user_id', targetUserId)
+            .order('earned_at', { ascending: false })
+            .limit(20);
+          if (mounted) setAchievements(data || []);
+        } catch {}
+      }
+    })();
+    return () => { mounted = false; };
+  }, [targetUserId]);
+
   const save = async (e) => {
     e?.preventDefault?.();
     if (!selfUser?.id || !isSelf) return;
@@ -253,6 +278,21 @@ export default function ProfilePage({ session, userId }) {
         </section>
 
         <section className="card section">
+          <h3 style={{ marginTop: 0 }}>Succès</h3>
+          {achievements.length === 0 ? (
+            <div style={{ fontSize: 14, opacity: 0.7 }}>(Aucun succès débloqué pour l’instant)</div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {achievements.map((a, i) => (
+                <span key={`${a.key}-${i}`} className="lb-pill" title={a.key}>
+                  🏅 {a.title || labelOf(a.key)} — {fmtDate(a.earned_at || a.day_key)}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card section">
           <h3 style={{ marginTop: 0 }}>Jours de complétion</h3>
           <div className="completion-grid">
             {range.map(({ key }, i) => {
@@ -289,4 +329,15 @@ export default function ProfilePage({ session, userId }) {
       </div>
     </div>
   );
+}
+
+function labelOf(key) {
+  switch (String(key || '')) {
+    case 'first_solve': return 'Première résolution';
+    case 'first_try': return '1er essai';
+    case 'streak_7': return 'Série de 7 jours';
+    case 'streak_30': return 'Série de 30 jours';
+    case 'no_hints': return 'Sans indices';
+    default: return key;
+  }
 }

@@ -7,14 +7,20 @@ import AdminPanel from "./components/AdminPanel";
 import Banner from "./components/Banner";
 import ProfilePage from "./components/ProfilePage";
 import RaceGame from "./components/RaceGame";
+import ArchivePage from "./components/ArchivePage";
+import StatsToday from "./components/StatsToday";
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [view, setView] = useState('home'); // 'home' | 'profile' | 'race'
+  const [view, setView] = useState('home'); // 'home' | 'profile' | 'race' | 'archive'
   const [profileUserId, setProfileUserId] = useState(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [raceSuspended, setRaceSuspended] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    const t = localStorage.getItem('theme');
+    return t === 'dark' ? 'dark' : 'light';
+  });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data, error }) => {
@@ -24,6 +30,14 @@ export default function App() {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Apply theme to body
+  useEffect(() => {
+    const cls = document.body.classList;
+    cls.remove('theme-dark');
+    if (theme === 'dark') cls.add('theme-dark');
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   // Si un username a été saisi lors de l'inscription mais qu'il n'y avait pas de session
   // (email confirmation), on le pousse dans `profiles` au premier login.
@@ -106,9 +120,19 @@ export default function App() {
             <div className="brand-title">BrainteaserDay</div>
           </div>
           <div className="nav-actions">
+            <button
+              className="btn btn-soft btn-lg"
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              title={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
+            >
+              {theme === 'dark' ? 'Thème clair' : 'Thème sombre'}
+            </button>
             {isAdmin && (
               <button className="btn btn-soft btn-lg" onClick={() => setShowAdmin(true)}>Admin</button>
             )}
+            <button className="btn btn-soft btn-lg" onClick={() => setView(view === 'archive' ? 'home' : 'archive')}>
+              {view === 'archive' ? 'Accueil' : 'Archives'}
+            </button>
             {!raceSuspended ? (
               view !== 'race' ? (
                 <button className="btn btn-soft btn-lg" onClick={() => setView('race')}>Mode Course</button>
@@ -129,6 +153,7 @@ export default function App() {
         <div className="home-grid">
           <div>
             <Game session={session} />
+            <StatsToday />
           </div>
           <div>
             <Leaderboard onSelectUser={(uid) => { setProfileUserId(uid); setView('profile'); }} />
@@ -136,13 +161,15 @@ export default function App() {
         </div>
       ) : view === 'profile' ? (
         <ProfilePage session={session} userId={profileUserId || session.user.id} />
+      ) : view === 'archive' ? (
+        <ArchivePage />
       ) : (
         !raceSuspended ? (
           <RaceGame session={session} />
         ) : (
           <div style={{ maxWidth: 900, margin: '20px auto', padding: '0 16px' }}>
             <h2 style={{ marginTop: 12 }}>🏁 Mode Course</h2>
-            <div style={{ background: 'white', border: '1px solid #eee', borderRadius: 16, padding: 16 }}>
+            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 16, padding: 16 }}>
               Le mode Course est actuellement suspendu par un administrateur.
             </div>
           </div>

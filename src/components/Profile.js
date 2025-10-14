@@ -63,10 +63,9 @@ export default function Profile({ session, onClose }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
     >
       <div
+        className="card"
         style={{
           width: 'min(92vw, 520px)',
-          background: 'white',
-          borderRadius: 16,
           padding: 20,
           boxShadow: '0 12px 32px rgba(0,0,0,0.15)'
         }}
@@ -85,21 +84,13 @@ export default function Profile({ session, onClose }) {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="ex: Alice"
               required
-              style={{
-                width: '100%',
-                marginTop: 6,
-                padding: '10px 12px',
-                borderRadius: 12,
-                border: '1px solid #ddd',
-                fontSize: 16,
-              }}
+              className="input"
+              style={{ width: '100%', marginTop: 6 }}
             />
           </label>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" onClick={onClose} style={{
-              padding: '10px 16px', borderRadius: 12, border: '1px solid #ddd', background: 'white', cursor: 'pointer'
-            }}>Annuler</button>
+            <button type="button" onClick={onClose} className="btn" style={{ padding: '10px 16px', borderRadius: 12 }}>Annuler</button>
             <button type="submit" disabled={loading} style={{
               padding: '10px 16px', borderRadius: 12, border: 'none', background: '#111', color: 'white', cursor: loading ? 'not-allowed' : 'pointer'
             }}>{loading ? 'Enregistrement…' : 'Enregistrer'}</button>
@@ -113,4 +104,3 @@ export default function Profile({ session, onClose }) {
     </div>
   );
 }
-
