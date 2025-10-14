@@ -141,24 +141,25 @@ export default function Game({ session }) {
     return () => window.removeEventListener('mathle:override-updated', handler);
   }, [dayKey, loadRiddle, loadHistory]);
 
-  // Vérifier si l'utilisateur est banni
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!session?.user?.id) { setIsBanned(false); return; }
-      try {
-        const { data } = await supabase
-          .from('bans')
-          .select('banned')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-        if (mounted) setIsBanned(Boolean(data?.banned));
-      } catch (e) {
-        if (mounted) setIsBanned(false);
-      }
-    })();
-    return () => { mounted = false; };
+  // Vérifier si l'utilisateur est banni (helper réutilisable)
+  const checkBan = useCallback(async () => {
+    if (!session?.user?.id) { setIsBanned(false); return false; }
+    try {
+      const { data } = await supabase
+        .from('bans')
+        .select('banned')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      const banned = Boolean(data?.banned);
+      setIsBanned(banned);
+      return banned;
+    } catch {
+      setIsBanned(false);
+      return false;
+    }
   }, [session?.user?.id]);
+
+  useEffect(() => { checkBan(); }, [checkBan]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -166,8 +167,13 @@ export default function Game({ session }) {
 
     if (!guess || !session) return;
     if (isBanned) {
-      setFeedback("Ton compte est banni. Contacte un administrateur.");
-      return;
+      const bannedNow = await checkBan();
+      if (bannedNow) {
+        setFeedback("Ton compte est banni. Contacte un administrateur.");
+        setGuess("");
+        return;
+      }
+      // si l'état était obsolète, on continue
     }
 
     // déjà résolu → on n'autorise plus d'essais
@@ -234,8 +240,10 @@ export default function Game({ session }) {
         setSolved(true);
         setFeedback('Tu as déjà résolu l’énigme du jour 🎉');
       } else if (raw.includes('banned')) {
-        setIsBanned(true);
-        setFeedback('Ton compte est banni. Contacte un administrateur.');
+        // Vérifie l'état réel côté serveur avant d'afficher le ban
+        const bannedNow = await checkBan();
+        if (bannedNow) setFeedback('Ton compte est banni. Contacte un administrateur.');
+        else setFeedback('Erreur momentanée, réessaie.');
       } else if (raw.includes('guess') && raw.includes('required')) {
         setFeedback('Entre une réponse 😉');
       } else {

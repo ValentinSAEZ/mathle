@@ -22,12 +22,26 @@ export default function App() {
     return t === 'dark' ? 'dark' : 'light';
   });
 
+  const handleSignOut = async () => {
+    try {
+      // Prefer local sign-out to avoid network dependency
+      await supabase.auth.signOut();
+    } catch (e) {
+      // Fallback: clear local session state to unblock UI
+      console.error('signOut error:', e);
+    } finally {
+      setSession(null);
+      setShowAdmin(false);
+      setView('home');
+    }
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data, error }) => {
       if (error) console.error(error);
       setSession(data?.session ?? null);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s ?? null));
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -145,7 +159,7 @@ export default function App() {
             ) : (
               <button className="btn btn-soft btn-lg" onClick={() => setView('home')}>Accueil</button>
             )}
-            <button className="btn btn-primary btn-lg" onClick={() => supabase.auth.signOut()}>Se déconnecter</button>
+            <button className="btn btn-primary btn-lg" onClick={handleSignOut}>Se déconnecter</button>
           </div>
         </div>
       </header>
