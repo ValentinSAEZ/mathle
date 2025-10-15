@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { burstConfetti, pulseOnce } from "../lib/celebrate";
 
@@ -21,6 +21,23 @@ function msUntilNextUTCMidnight() {
     0, 0, 0, 0
   ));
   return next - now;
+}
+
+// Helpers pour stats personnelles (UTC)
+function addDaysUTC(date, days) {
+  const d = new Date(date);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days));
+}
+
+function startOfUTCDay(date = new Date()) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+}
+
+function dateKeyUTC(date) {
+  const yyyy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 /** ---------- Prefers reduced motion ---------- **/
@@ -48,7 +65,16 @@ export default function Game({ session }) {
   const [shareMsg, setShareMsg] = useState('');
   const [awardsToday, setAwardsToday] = useState([]);
 
+  // Stats personnelles (fallback local)
+  const [greetingName, setGreetingName] = useState('');
+  const [selfLoading, setSelfLoading] = useState(true);
+  const [streak, setStreak] = useState(0);
+  const [avgAttempts, setAvgAttempts] = useState(null);
+
   const dayKey = getUTCDateKey();
+  const days = 42;
+  const end = useMemo(() => startOfUTCDay(new Date()), []);
+  const start = useMemo(() => addDaysUTC(end, -(days - 1)), [end]);
 
   // Compte à rebours vers minuit UTC
   useEffect(() => {
@@ -124,6 +150,83 @@ export default function Game({ session }) {
   useEffect(() => {
     loadRiddle();
   }, [loadRiddle]);
+
+  // Charger stats personnelles (nom, streak, moyenne d’essais)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setSelfLoading(true);
+        const uid = session?.user?.id;
+        const email = session?.user?.email || '';
+        if (!uid) { if (mounted) setSelfLoading(false); return; }
+
+        // Nom d’accueil
+        try {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('id', uid)
+            .maybeSingle();
+          const name = (prof?.username && String(prof.username).trim()) || (email.split('@')[0] || 'Utilisateur');
+          if (mounted) setGreetingName(name);
+        } catch {
+          if (mounted) setGreetingName(email.split('@')[0] || 'Utilisateur');
+        }
+
+        // Streak (vue user_completions si dispo)
+        try {
+          const { data: comp } = await supabase
+            .from('user_completions')
+            .select('day_key, solved')
+            .eq('user_id', uid)
+            .gte('day_key', dateKeyUTC(start))
+            .lte('day_key', dateKeyUTC(end));
+          const map = new Map();
+          for (const row of comp || []) map.set(String(row.day_key), Boolean(row.solved));
+          const range = [];
+          for (let i = 0; i < days; i++) { const dt = addDaysUTC(start, i); range.push(dateKeyUTC(dt)); }
+          let s = 0; for (let i = range.length - 1; i >= 0; i--) { const k = range[i]; if (map.get(k) === true) s++; else break; }
+          if (mounted) setStreak(s);
+        } catch {
+          try {
+            const { data: atts } = await supabase
+              .from('attempts')
+              .select('day_key, result')
+              .eq('user_id', uid)
+              .gte('day_key', dateKeyUTC(start))
+              .lte('day_key', dateKeyUTC(end));
+            const map = new Map();
+            for (const row of atts || []) { const k = String(row.day_key); if (row.result === 'correct') map.set(k, true); else if (!map.has(k)) map.set(k, false); }
+            const range = [];
+            for (let i = 0; i < days; i++) { const dt = addDaysUTC(start, i); range.push(dateKeyUTC(dt)); }
+            let s = 0; for (let i = range.length - 1; i >= 0; i--) { const k = range[i]; if (map.get(k) === true) s++; else break; }
+            if (mounted) setStreak(s);
+          } catch {}
+        }
+
+        // Moyenne d’essais jusqu’à réussite
+        try {
+          const { data: atts } = await supabase
+            .from('attempts')
+            .select('day_key, created_at, result')
+            .eq('user_id', uid)
+            .gte('day_key', dateKeyUTC(start))
+            .lte('day_key', dateKeyUTC(end))
+            .order('created_at', { ascending: true });
+          const byDay = new Map();
+          for (const a of atts || []) { const k = String(a.day_key); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push({ created_at: a.created_at, result: a.result }); }
+          const counts = [];
+          for (const [, arr] of byDay.entries()) { const idx = arr.findIndex(x => x.result === 'correct'); if (idx >= 0) counts.push(idx + 1); }
+          const avg = counts.length ? (counts.reduce((s, n) => s + n, 0) / counts.length) : null;
+          if (mounted) setAvgAttempts(avg);
+        } catch { if (mounted) setAvgAttempts(null); }
+      } finally {
+        if (mounted) setSelfLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [session?.user?.id, session?.user?.email, days, start, end]);
 
   // Se mettre à jour immédiatement lors d'un override (événement local depuis AdminPanel)
   useEffect(() => {
@@ -396,6 +499,22 @@ export default function Game({ session }) {
               </li>
             ))}
           </ul>
+        )}
+      </div>
+
+      {/* Stats personnelles (fallback local) */}
+      <div className="card" style={{ marginTop: 18, padding: 16 }}>
+        <h3 style={{ margin: 0, marginBottom: 8 }}>📈 Stats</h3>
+        {selfLoading ? (
+          <div>Chargement…</div>
+        ) : (
+          <div>
+            <div style={{ fontSize: 16, marginBottom: 6 }}>Bonjour{greetingName ? `, ${greetingName}` : ''} 👋</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <span className="lb-pill">Série actuelle: {streak} jour{streak > 1 ? 's' : ''}</span>
+              <span className="lb-pill">Moyenne d’essais: {avgAttempts == null ? '—' : Number(avgAttempts).toFixed(2)}</span>
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -37,6 +37,13 @@ export default function ProfilePage({ session, userId }) {
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Password change state
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pw1, setPw1] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState('');
+
   const [solvedMap, setSolvedMap] = useState(() => new Map()); // key: yyyy-mm-dd -> true/false
   const [raceRuns, setRaceRuns] = useState([]); // [{created_at,duration,level,score,attempts}]
   const [achievements, setAchievements] = useState([]);
@@ -217,6 +224,30 @@ export default function ProfilePage({ session, userId }) {
     }
   };
 
+  const changePassword = async (e) => {
+    e?.preventDefault?.();
+    if (!session?.user) return;
+    setPwMsg('');
+    if (pw1 !== pw2) { setPwMsg('Les mots de passe ne correspondent pas.'); return; }
+    if ((pw1 || '').length < 6) { setPwMsg('Le mot de passe doit contenir au moins 6 caractères.'); return; }
+    setPwSaving(true);
+    try {
+      const email = session.user.email;
+      if (pwCurrent) {
+        const { error: reauthErr } = await supabase.auth.signInWithPassword({ email, password: pwCurrent });
+        if (reauthErr) { setPwMsg('Mot de passe actuel incorrect.'); setPwSaving(false); return; }
+      }
+      const { error } = await supabase.auth.updateUser({ password: pw1 });
+      if (error) throw error;
+      setPwMsg('Mot de passe mis à jour ✅');
+      setPwCurrent(''); setPw1(''); setPw2('');
+    } catch (err) {
+      setPwMsg(err?.message || 'Impossible de mettre à jour le mot de passe.');
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
   return (
     <div className="profile-page" style={{ maxWidth: 900, margin: '20px auto', padding: '0 16px' }}>
       <h2 className="page-title" style={{ marginTop: 12 }}>Mon profil</h2>
@@ -276,6 +307,60 @@ export default function ProfilePage({ session, userId }) {
             {message && <div style={{ fontSize: 14 }}>{message}</div>}
           </div>
         </section>
+
+        {isSelf && (
+          <section className="card section">
+            <details>
+              <summary style={{ cursor: 'pointer', fontWeight: 600, outline: 'none' }}>🔒 Sécurité (modifier le mot de passe)</summary>
+              <form onSubmit={changePassword} style={{ display: 'grid', gap: 10, maxWidth: 520, marginTop: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>Mot de passe actuel (optionnel)</div>
+                <input
+                  type="password"
+                  className="input"
+                  value={pwCurrent}
+                  onChange={(e) => setPwCurrent(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>Nouveau mot de passe</div>
+                <input
+                  type="password"
+                  className="input"
+                  value={pw1}
+                  onChange={(e) => setPw1(e.target.value)}
+                  placeholder="Au moins 6 caractères"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>Confirmer le nouveau mot de passe</div>
+                <input
+                  type="password"
+                  className="input"
+                  value={pw2}
+                  onChange={(e) => setPw2(e.target.value)}
+                  placeholder="Répétez le mot de passe"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="submit" className="btn btn-primary" disabled={pwSaving}>
+                  {pwSaving ? 'Mise à jour…' : 'Changer le mot de passe'}
+                </button>
+                {pwMsg && <div style={{ alignSelf: 'center', fontSize: 14 }}>{pwMsg}</div>}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                Astuce: fournir le mot de passe actuel permet de revérifier votre identité.
+              </div>
+              </form>
+            </details>
+          </section>
+        )}
 
         <section className="card section">
           <h3 style={{ marginTop: 0 }}>Succès</h3>
