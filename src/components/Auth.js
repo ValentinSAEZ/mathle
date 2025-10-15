@@ -47,6 +47,24 @@ export default function Auth({ onSignedIn }) {
     }
   };
 
+  const forgotPassword = async () => {
+    setErrorMsg('');
+    setInfoMsg('');
+    const mail = String(email || '').trim();
+    if (!mail) { setErrorMsg('Saisissez votre email puis réessayez.'); return; }
+    setLoading(true);
+    try {
+      const redirectTo = (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : undefined;
+      const { error } = await supabase.auth.resetPasswordForEmail(mail, { redirectTo });
+      if (error) throw error;
+      setInfoMsg('Email de réinitialisation envoyé. Vérifiez votre boîte mail.');
+    } catch (err) {
+      setErrorMsg(err?.message || "Impossible d’envoyer l’email de réinitialisation.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const switchMode = (next) => {
     setMode(next);
     setErrorMsg('');
@@ -136,6 +154,18 @@ export default function Auth({ onSignedIn }) {
               required
               autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
             />
+            {mode === 'signin' && (
+              <div style={{ marginTop: 6 }}>
+                <button
+                  type="button"
+                  className="auth-link"
+                  onClick={forgotPassword}
+                  disabled={loading}
+                >
+                  Mot de passe oublié ?
+                </button>
+              </div>
+            )}
           </div>
 
           {errorMsg ? (
