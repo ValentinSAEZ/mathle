@@ -238,6 +238,31 @@ code {
 
 .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-2)); }
 
+.theme-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  line-height: 1;
+  background: var(--card-bg);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 8px 18px rgba(17,24,39,0.12);
+  cursor: pointer;
+  z-index: 50;
+}
+.theme-fab:hover { filter: brightness(1.02); transform: translateY(-1px); }
+.theme-fab:active { transform: translateY(0); }
+
+@media (max-width: 640px) {
+  .theme-fab { right: 12px; bottom: 12px; width: 40px; height: 40px; font-size: 17px; }
+}
+
 .page-title { text-align: center; margin: 8px 0 12px; }
 /* generic padded section helper */
 .section { padding: 16px; }

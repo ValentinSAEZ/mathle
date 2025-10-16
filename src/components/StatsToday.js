@@ -28,6 +28,10 @@ export default function StatsToday() {
   const [streak, setStreak] = useState(0);
   const [avgAttempts, setAvgAttempts] = useState(null);
   const [selfLoading, setSelfLoading] = useState(true);
+  // Race (course) personal stats
+  const [raceBestScore, setRaceBestScore] = useState(null);
+  const [raceBestToday, setRaceBestToday] = useState(null);
+  const [raceRunsCount, setRaceRunsCount] = useState(null);
 
   const days = 42;
   const end = useMemo(() => startOfUTCDay(new Date()), []);
@@ -52,7 +56,7 @@ export default function StatsToday() {
     return () => { mounted = false; };
   }, []);
 
-  // Load personal stats (username, streak, average attempts)
+  // Load personal stats (username, streak, average attempts, race stats)
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -152,6 +156,46 @@ export default function StatsToday() {
         } catch {
           if (mounted) setAvgAttempts(null);
         }
+
+        // Course d'équations — meilleur score (global) et meilleur du jour
+        try {
+          // Overall best score
+          const { data: bestRows } = await supabase
+            .from('race_runs')
+            .select('score')
+            .eq('user_id', uid)
+            .order('score', { ascending: false })
+            .limit(1);
+          if (mounted) setRaceBestScore(bestRows?.[0]?.score ?? 0);
+        } catch {
+          if (mounted) setRaceBestScore(null);
+        }
+        try {
+          // Best score for today (UTC)
+          const dayStart = startOfUTCDay(new Date());
+          const dayEnd = addDaysUTC(dayStart, 1);
+          const { data: bestTodayRows } = await supabase
+            .from('race_runs')
+            .select('score')
+            .eq('user_id', uid)
+            .gte('created_at', dayStart.toISOString())
+            .lt('created_at', dayEnd.toISOString())
+            .order('score', { ascending: false })
+            .limit(1);
+          if (mounted) setRaceBestToday(bestTodayRows?.[0]?.score ?? 0);
+        } catch {
+          if (mounted) setRaceBestToday(null);
+        }
+        try {
+          // Total runs count
+          const { count } = await supabase
+            .from('race_runs')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', uid);
+          if (mounted) setRaceRunsCount(typeof count === 'number' ? count : null);
+        } catch {
+          if (mounted) setRaceRunsCount(null);
+        }
       } finally {
         if (mounted) setSelfLoading(false);
       }
@@ -182,27 +226,40 @@ export default function StatsToday() {
         <h4 style={{ margin: '10px 0 8px 0' }}>📊 Stats du jour</h4>
         {loading && !data ? (
           <div>Chargement…</div>
-        ) : data ? (
+        ) : (
           <>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <span className="lb-pill">Joueurs: {data.total_players}</span>
-              <span className="lb-pill">Résolus: {data.solvers} ({rate}%)</span>
-              <span className="lb-pill">Moy. essais (réussite): {Number(data.avg_attempts || 0).toFixed(2)}</span>
+            {data && (
+              <>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <span className="lb-pill">Joueurs: {data.total_players}</span>
+                  <span className="lb-pill">Résolus: {data.solvers} ({rate}%)</span>
+                  <span className="lb-pill">Moy. essais (réussite): {Number(data.avg_attempts || 0).toFixed(2)}</span>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Distribution jusqu’à réussite</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {Array.from({ length: 6 }).map((_, i) => {
+                      const k = String(i + 1);
+                      const v = dist[k] || 0;
+                      return <span key={k} className="lb-pill">{k}: {v}</span>;
+                    })}
+                    <span className="lb-pill">&gt;6: {dist['>6'] || 0}</span>
+                  </div>
+                </div>
+              </>
+            )}
+            <div style={{ marginTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <span className="lb-pill">Série en cours: {streak} j</span>
             </div>
-            <div style={{ marginTop: 10 }}>
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>Distribution jusqu’à réussite</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {Array.from({ length: 6 }).map((_, i) => {
-                  const k = String(i + 1);
-                  const v = dist[k] || 0;
-                  return <span key={k} className="lb-pill">{k}: {v}</span>;
-                })}
-                <span className="lb-pill">&gt;6: {dist['>6'] || 0}</span>
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>🏁 Course — Tes stats</div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <span className="lb-pill">Meilleur score: {raceBestScore == null ? '—' : raceBestScore}</span>
+                <span className="lb-pill">Meilleur aujourd’hui: {raceBestToday == null ? '—' : raceBestToday}</span>
+                <span className="lb-pill">Runs total: {raceRunsCount == null ? '—' : raceRunsCount}</span>
               </div>
             </div>
           </>
-        ) : (
-          <div>Stats du jour indisponibles</div>
         )}
       </div>
     </div>

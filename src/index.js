@@ -16,9 +16,23 @@ root.render(
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
 
-// Register a basic service worker for offline support
+// Service worker: enable for production, disable in development to avoid caching issues
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
-  });
+  if (process.env.NODE_ENV === 'production') {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    });
+  } else {
+    // In dev, unregister any existing service workers and clear caches for this origin
+    window.addEventListener('load', async () => {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        regs.forEach((r) => r.unregister());
+        if (window.caches?.keys) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        }
+      } catch {}
+    });
+  }
 }

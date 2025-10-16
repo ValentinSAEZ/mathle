@@ -116,6 +116,15 @@ export default function App() {
     <div>
       <Banner />
       <Auth onSignedIn={setSession} />
+      {/* Floating theme toggle (visible même sans session) */}
+      <button
+        className="theme-fab"
+        onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        title={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
+        aria-label={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
+      >
+        {theme === 'dark' ? '☀️' : '🌙'}
+      </button>
     </div>
   );
 
@@ -134,13 +143,6 @@ export default function App() {
             <div className="brand-title">BrainteaserDay</div>
           </div>
           <div className="nav-actions">
-            <button
-              className="btn btn-soft btn-lg"
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-              title={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
-            >
-              {theme === 'dark' ? 'Thème clair' : 'Thème sombre'}
-            </button>
             {isAdmin && (
               <button className="btn btn-soft btn-lg" onClick={() => setShowAdmin(true)}>Admin</button>
             )}
@@ -192,6 +194,15 @@ export default function App() {
       {showAdmin && (
         <AdminPanel onClose={() => setShowAdmin(false)} />
       )}
+      {/* Floating theme toggle */}
+      <button
+        className="theme-fab"
+        onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        title={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
+        aria-label={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
+      >
+        {theme === 'dark' ? '☀️' : '🌙'}
+      </button>
     </div>
   );
 }
