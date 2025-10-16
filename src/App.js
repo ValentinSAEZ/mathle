@@ -136,9 +136,9 @@ export default function App() {
           <div className="brand" onClick={() => setView('home')} title="Aller à l’accueil">
             <img
               className="brand-logo"
-              src="/brand/logo.png"
+              src={`${process.env.PUBLIC_URL || ''}/brand/logo.png`}
               alt="BrainteaserDay"
-              onError={(e) => { e.currentTarget.src = '/logo192.png'; }}
+              onError={(e) => { e.currentTarget.src = `${process.env.PUBLIC_URL || ''}/logo192.png`; }}
             />
             <div className="brand-title">BrainteaserDay</div>
           </div>

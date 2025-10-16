@@ -366,7 +366,7 @@ export default function Game({ session }) {
       <h1 className="page-title">
         <img
           className="brand-inline"
-          src="/brand/logo.png"
+          src={`${process.env.PUBLIC_URL || ''}/brand/logo.png`}
           alt="Logo"
           onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.insertAdjacentText('afterbegin', '🧩 '); }}
         />

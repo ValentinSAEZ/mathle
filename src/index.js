@@ -20,7 +20,10 @@ reportWebVitals();
 if ('serviceWorker' in navigator) {
   if (process.env.NODE_ENV === 'production') {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+      // Register SW with the correct base path for subpath deployments (e.g., GitHub Pages)
+      const publicUrl = process.env.PUBLIC_URL || '';
+      const swUrl = `${publicUrl}/service-worker.js`;
+      navigator.serviceWorker.register(swUrl).catch(() => {});
     });
   } else {
     // In dev, unregister any existing service workers and clear caches for this origin

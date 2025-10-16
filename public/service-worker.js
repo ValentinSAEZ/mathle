@@ -1,12 +1,17 @@
 /* Basic offline-first service worker */
-const CACHE_NAME = 'brainteaserday-v1';
+// Bump this to force refresh after deploys
+const CACHE_NAME = 'brainteaserday-v2';
+
+// Build absolute URLs so this works on subpaths (e.g., GitHub Pages)
+const scopeUrl = new URL(self.registration.scope);
+const abs = (path) => new URL(path, scopeUrl).toString();
+
 const CORE_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/offline.html',
-  '/logo192.png',
-  '/logo512.png'
+  abs('index.html'),
+  abs('manifest.json'),
+  abs('offline.html'),
+  abs('logo192.png'),
+  abs('logo512.png')
 ];
 
 self.addEventListener('install', (event) => {
@@ -35,4 +40,3 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
-

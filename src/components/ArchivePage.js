@@ -54,7 +54,7 @@ export default function ArchivePage() {
       <h2 className="page-title" style={{ marginTop: 12 }}>
         <img
           className="brand-inline"
-          src="/brand/logo.png"
+          src={`${process.env.PUBLIC_URL || ''}/brand/logo.png`}
           alt="Logo"
           onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.insertAdjacentText('afterbegin', '📚 '); }}
         />

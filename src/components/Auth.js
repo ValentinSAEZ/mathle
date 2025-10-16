@@ -77,10 +77,10 @@ export default function Auth({ onSignedIn }) {
         <div className="auth-header">
           <div className="auth-logo" aria-hidden="true">
             <picture>
-              <source srcSet="/brand/logo.svg" type="image/svg+xml" />
+              <source srcSet={`${process.env.PUBLIC_URL || ''}/brand/logo.svg`} type="image/svg+xml" />
               <img
                 className="auth-logo-img"
-                src="/brand/logo.png"
+                src={`${process.env.PUBLIC_URL || ''}/brand/logo.png`}
                 alt="BrainteaserDay"
                 onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.insertAdjacentText('beforeend', '🧠'); }}
               />
