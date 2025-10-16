@@ -363,7 +363,15 @@ export default function Game({ session }) {
 
   return (
     <div style={{ maxWidth: 760, margin: "80px auto", padding: "0 16px" }}>
-      <h1 className="page-title">🧩 BrainteaserDay — L’énigme du jour</h1>
+      <h1 className="page-title">
+        <img
+          className="brand-inline"
+          src="/brand/logo.png"
+          alt="Logo"
+          onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.insertAdjacentText('afterbegin', '🧩 '); }}
+        />
+        BrainteaserDay — L’énigme du jour
+      </h1>
 
       <div style={{ textAlign: "center", margin: "12px 0", fontSize: 14, opacity: 0.8 }}>
         {`Énigme du ${dayKey} (UTC) • Prochaine dans ${timeParts.h}h ${timeParts.m}m ${timeParts.s}s`}

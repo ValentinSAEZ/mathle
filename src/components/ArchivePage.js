@@ -51,7 +51,15 @@ export default function ArchivePage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '20px auto', padding: '0 16px' }}>
-      <h2 className="page-title" style={{ marginTop: 12 }}>📚 Archives des énigmes</h2>
+      <h2 className="page-title" style={{ marginTop: 12 }}>
+        <img
+          className="brand-inline"
+          src="/brand/logo.png"
+          alt="Logo"
+          onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.insertAdjacentText('afterbegin', '📚 '); }}
+        />
+        Archives des énigmes
+      </h2>
       <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>Jour courant (UTC): {todayKey}. Les archives affichent uniquement les jours passés.</div>
 
       {loading && (<div>Chargement…</div>)}

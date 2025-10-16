@@ -263,6 +263,9 @@ code {
   .theme-fab { right: 12px; bottom: 12px; width: 40px; height: 40px; font-size: 17px; }
 }
 
+/* Small inline brand logo for titles */
+.brand-inline { width: 22px; height: 22px; object-fit: contain; vertical-align: -4px; border-radius: 6px; margin-right: 6px; }
+
 .page-title { text-align: center; margin: 8px 0 12px; }
 /* generic padded section helper */
 .section { padding: 16px; }

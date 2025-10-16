@@ -156,7 +156,15 @@ export default function RaceGame({ session }) {
 
   return (
     <div style={{ maxWidth: 900, margin: '20px auto', padding: '0 16px' }}>
-      <h2 className="page-title" style={{ marginTop: 12 }}>🏁 Mode Course — Résous un max d’équations</h2>
+      <h2 className="page-title" style={{ marginTop: 12 }}>
+        <img
+          className="brand-inline"
+          src="/brand/logo.png"
+          alt="Logo"
+          onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.insertAdjacentText('afterbegin', '🏁 '); }}
+        />
+        Mode Course — Résous un max d’équations
+      </h2>
 
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr' }}>
         <section className="card section">
