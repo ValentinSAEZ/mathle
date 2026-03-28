@@ -17,6 +17,11 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [raceSuspended, setRaceSuspended] = useState(false);
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [newPw, setNewPw] = useState('');
+  const [newPw2, setNewPw2] = useState('');
+  const [pwResetMsg, setPwResetMsg] = useState('');
+  const [pwResetSaving, setPwResetSaving] = useState(false);
   const [theme, setTheme] = useState(() => {
     const t = localStorage.getItem('theme');
     return t === 'dark' ? 'dark' : 'light';
@@ -39,7 +44,12 @@ export default function App() {
       if (error) console.error(error);
       setSession(data?.session ?? null);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s ?? null));
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s ?? null);
+      if (event === 'PASSWORD_RECOVERY') {
+        setShowPasswordReset(true);
+      }
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -220,6 +230,49 @@ export default function App() {
       </div>
 
       {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
+
+      {showPasswordReset && (
+        <div className="admin-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowPasswordReset(false); }}>
+          <div className="admin-panel" style={{ maxWidth: 420 }}>
+            <h3 style={{ margin: '0 0 16px' }}>Changer votre mot de passe</h3>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setPwResetMsg('');
+              if (newPw !== newPw2) { setPwResetMsg('Les mots de passe ne correspondent pas.'); return; }
+              if (newPw.length < 6) { setPwResetMsg('Au moins 6 caractères requis.'); return; }
+              setPwResetSaving(true);
+              try {
+                const { error } = await supabase.auth.updateUser({ password: newPw });
+                if (error) throw error;
+                setPwResetMsg('Mot de passe mis à jour !');
+                setTimeout(() => { setShowPasswordReset(false); setNewPw(''); setNewPw2(''); setPwResetMsg(''); }, 1500);
+              } catch (err) {
+                setPwResetMsg(err?.message || 'Erreur lors de la mise à jour.');
+              } finally {
+                setPwResetSaving(false);
+              }
+            }} style={{ display: 'grid', gap: 14 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Nouveau mot de passe</div>
+                <input type="password" className="input" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="Au moins 6 caractères" required autoComplete="new-password" />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Confirmer</div>
+                <input type="password" className="input" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} placeholder="Répéter le mot de passe" required autoComplete="new-password" />
+              </div>
+              {pwResetMsg && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{pwResetMsg}</div>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="submit" className="btn btn-primary" disabled={pwResetSaving} style={{ flex: 1 }}>
+                  {pwResetSaving ? 'Mise à jour…' : 'Changer le mot de passe'}
+                </button>
+                <button type="button" className="btn" onClick={() => { setShowPasswordReset(false); setNewPw(''); setNewPw2(''); setPwResetMsg(''); }}>
+                  Annuler
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <button className="theme-fab" onClick={toggleTheme}
         title={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
