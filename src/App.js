@@ -8,6 +8,8 @@ import Banner from "./components/Banner";
 import ProfilePage from "./components/ProfilePage";
 import RaceGame from "./components/RaceGame";
 import ArchivePage from "./components/ArchivePage";
+import ForumPage from "./components/ForumPage";
+import LandingPage from "./components/LandingPage";
 import StatsToday from "./components/StatsToday";
 
 export default function App() {
@@ -117,10 +119,23 @@ export default function App() {
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
 
+  const [showAuth, setShowAuth] = useState(false);
+
   if (!session) return (
     <div>
       <Banner />
-      <Auth onSignedIn={setSession} />
+      {showAuth ? (
+        <div>
+          <Auth onSignedIn={setSession} />
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
+            <button className="btn-link" onClick={() => setShowAuth(false)} style={{ appearance: 'none', border: 'none', background: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+              ← Retour à l'accueil
+            </button>
+          </div>
+        </div>
+      ) : (
+        <LandingPage onGetStarted={() => setShowAuth(true)} />
+      )}
       <button className="theme-fab" onClick={toggleTheme}
         title={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
         aria-label={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
@@ -133,6 +148,7 @@ export default function App() {
   const navItems = [
     { key: 'home', label: 'Accueil', icon: '🏠' },
     ...((!raceSuspended) ? [{ key: 'race', label: 'Course', icon: '🏁' }] : []),
+    { key: 'forum', label: 'Forum', icon: '💬' },
     { key: 'archive', label: 'Archives', icon: '📚' },
     { key: 'profile', label: 'Profil', icon: '👤' },
   ];
@@ -214,6 +230,8 @@ export default function App() {
           </div>
         ) : view === 'profile' ? (
           <ProfilePage session={session} userId={profileUserId || session.user.id} />
+        ) : view === 'forum' ? (
+          <ForumPage session={session} onSelectUser={(uid) => { setProfileUserId(uid); setView('profile'); }} />
         ) : view === 'archive' ? (
           <ArchivePage />
         ) : view === 'race' ? (

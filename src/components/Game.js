@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { burstConfetti, pulseOnce } from "../lib/celebrate";
+import { bigCelebration, burstConfetti, pulseOnce, getLevelInfo, getXpProgress, RIDDLE_THEMES } from "../lib/celebrate";
 
 function getUTCDateKey() {
   const now = new Date();
@@ -39,19 +39,23 @@ const prefersReducedMotion = () => {
 export default function Game({ session }) {
   const [guess, setGuess] = useState("");
   const [feedback, setFeedback] = useState("");
-  const [feedbackType, setFeedbackType] = useState(""); // "success" | "error" | ""
+  const [feedbackType, setFeedbackType] = useState("");
   const [timeLeft, setTimeLeft] = useState(msUntilNextUTCMidnight());
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [solved, setSolved] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const submitBtnRef = useRef(null);
+  const victoryRef = useRef(null);
 
   const [riddle, setRiddle] = useState(null);
   const [riddleLoading, setRiddleLoading] = useState(false);
   const [riddleError, setRiddleError] = useState('');
   const [shareMsg, setShareMsg] = useState('');
   const [awardsToday, setAwardsToday] = useState([]);
+  const [showVictory, setShowVictory] = useState(false);
+  const [xpGained, setXpGained] = useState(0);
+  const [userXp, setUserXp] = useState(0);
 
   const [greetingName, setGreetingName] = useState('');
   const [selfLoading, setSelfLoading] = useState(true);
@@ -125,6 +129,17 @@ export default function Game({ session }) {
 
   useEffect(() => { loadRiddle(); }, [loadRiddle]);
 
+  // Load user XP
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    (async () => {
+      try {
+        const { data } = await supabase.from('profiles').select('xp').eq('id', session.user.id).maybeSingle();
+        setUserXp(data?.xp || 0);
+      } catch {}
+    })();
+  }, [session?.user?.id]);
+
   // Personal stats
   useEffect(() => {
     let mounted = true;
@@ -190,6 +205,7 @@ export default function Game({ session }) {
       setFeedbackType("");
       setGuess("");
       setHistory([]);
+      setShowVictory(false);
       loadRiddle();
       loadHistory();
     };
@@ -229,7 +245,7 @@ export default function Game({ session }) {
     }
 
     if (solved) {
-      setFeedback("Tu as déjà résolu l'énigme du jour !");
+      setFeedback("Tu as deja resolu l'enigme du jour !");
       setFeedbackType("success");
       setGuess("");
       return;
@@ -248,29 +264,58 @@ export default function Game({ session }) {
 
       let msg = '';
       let type = '';
-      if (result === 'correct') { msg = 'Bravo, bonne réponse !'; type = 'success'; }
+      if (result === 'correct') { msg = 'Bravo, bonne reponse !'; type = 'success'; }
       else if (result === 'low') { msg = 'Trop petit !'; type = 'error'; }
       else if (result === 'high') { msg = 'Trop grand !'; type = 'error'; }
-      else { msg = "Ce n'est pas ça… réessaie !"; type = 'error'; }
+      else { msg = "Ce n'est pas ca... reessaie !"; type = 'error'; }
 
       const newEntry = { t: new Date().toISOString(), guess: String(guess), result };
       setHistory((h) => [newEntry, ...h]);
       if (result === 'correct') {
         setSolved(true);
-        if (!prefersReducedMotion()) burstConfetti({ originEl: submitBtnRef.current });
-        pulseOnce(submitBtnRef.current);
+
+        // Calculate XP gained
+        const attempts = (history?.length || 0) + 1;
+        let xp = 10; // base XP
+        if (attempts === 1) xp += 15; // first try bonus
+        else if (attempts <= 3) xp += 8; // quick solve bonus
+        else if (attempts <= 5) xp += 3;
+        // streak bonus
+        if (streak >= 7) xp += 5;
+        if (streak >= 30) xp += 10;
+
+        setXpGained(xp);
+
+        // Award XP in DB
         try {
-          const attempts = (history?.length || 0) + 1;
+          const { data: newXp } = await supabase.rpc('award_xp', { p_user: session.user.id, p_amount: xp });
+          if (typeof newXp === 'number') setUserXp(newXp);
+          else setUserXp(prev => prev + xp);
+        } catch {
+          setUserXp(prev => prev + xp);
+        }
+
+        // Build share message
+        try {
           const bar = [...[...history].reverse(), { result: 'correct' }]
             .map(h => h.result === 'correct' ? '\uD83D\uDFE9' : (h.result === 'low' ? '\uD83D\uDD35' : (h.result === 'high' ? '\uD83D\uDD34' : '\u2B1C')))
             .join('');
-          const text = `BrainteaserDay ${dayKey} — ${attempts} essai${attempts>1?'s':''}\n${bar}\n${window.location.origin}/archive?day=${dayKey}`;
+          const text = `BrainteaserDay ${dayKey} — ${attempts} essai${attempts>1?'s':''}\n${bar}\nhttps://brainteaserday.vercel.app`;
           setShareMsg(text);
         } catch {}
+
+        // Load awards
         try {
           const { data: awd } = await supabase.rpc('get_awards_for_day', { p_day: dayKey });
           if (Array.isArray(awd)) setAwardsToday(awd);
         } catch {}
+
+        // Show victory card with animation
+        setShowVictory(true);
+        if (!prefersReducedMotion()) {
+          setTimeout(() => bigCelebration({ originEl: victoryRef.current || submitBtnRef.current }), 200);
+        }
+        pulseOnce(submitBtnRef.current);
       }
       setFeedback(msg);
       setFeedbackType(type);
@@ -279,21 +324,25 @@ export default function Game({ session }) {
       console.error(e);
       const raw = (e?.message || '').toLowerCase();
       if (raw.includes('rate') && raw.includes('limit')) {
-        setFeedback("Trop d'essais, réessaie dans quelques secondes.");
+        setFeedback("Trop d'essais, reessaie dans quelques secondes.");
       } else if (raw.includes('already') && raw.includes('solv')) {
         setSolved(true);
-        setFeedback("Tu as déjà résolu l'énigme du jour !");
+        setFeedback("Tu as deja resolu l'enigme du jour !");
         setFeedbackType("success");
       } else if (raw.includes('banned')) {
         const bannedNow = await checkBan();
         if (bannedNow) setFeedback('Ton compte est banni.');
-        else setFeedback('Erreur momentanée, réessaie.');
+        else setFeedback('Erreur momentanee, reessaie.');
       } else {
-        setFeedback("Erreur lors de l'enregistrement. Réessaie.");
+        setFeedback("Erreur lors de l'enregistrement. Reessaie.");
       }
       setFeedbackType("error");
     }
   };
+
+  const levelInfo = getLevelInfo(userXp);
+  const xpProgress = getXpProgress(userXp);
+  const theme = RIDDLE_THEMES[riddle?.theme] || RIDDLE_THEMES.general;
 
   return (
     <div>
@@ -305,7 +354,7 @@ export default function Game({ session }) {
           </div>
         )}
         <div className="countdown">
-          <span>Prochaine énigme dans</span>
+          <span>Prochaine enigme dans</span>
           <span className="countdown-digit">{String(timeParts.h).padStart(2,'0')}</span>
           <span>:</span>
           <span className="countdown-digit">{String(timeParts.m).padStart(2,'0')}</span>
@@ -314,9 +363,18 @@ export default function Game({ session }) {
         </div>
       </div>
 
+      {/* Theme badge */}
+      {riddle && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+          <span className="theme-badge" style={{ '--theme-color': theme.color }}>
+            <span>{theme.icon}</span> {theme.label}
+          </span>
+        </div>
+      )}
+
       {/* Question card */}
       <div className="question-card" style={{ marginBottom: 16 }}>
-        {riddleLoading && <span style={{ color: 'var(--muted)' }}>Chargement de l'énigme…</span>}
+        {riddleLoading && <span style={{ color: 'var(--muted)' }}>Chargement de l'enigme...</span>}
         {!riddleLoading && riddle && String(riddle.question || '')
           .split(/\n{2,}/)
           .map((para, i) => (
@@ -324,7 +382,7 @@ export default function Game({ session }) {
           ))}
         {!riddleLoading && !riddle && (
           <div>
-            <div style={{ color: 'var(--muted)' }}>Énigme indisponible pour le moment.</div>
+            <div style={{ color: 'var(--muted)' }}>Enigme indisponible pour le moment.</div>
             {riddleError && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--danger)' }}>{riddleError}</div>}
           </div>
         )}
@@ -336,7 +394,7 @@ export default function Game({ session }) {
           type="text"
           value={guess}
           onChange={(e) => setGuess(e.target.value)}
-          placeholder="Ta réponse"
+          placeholder="Ta reponse"
           disabled={loading || solved || isBanned || riddleLoading || !riddle}
           className="input"
           style={{ flex: 1 }}
@@ -353,30 +411,80 @@ export default function Game({ session }) {
         </button>
       </form>
 
-      {/* Share & awards */}
-      {solved && shareMsg && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-          <button type="button" className="btn"
-            onClick={async () => { try { await navigator.clipboard.writeText(shareMsg); setFeedback('Résultat copié !'); setFeedbackType('success'); } catch { setFeedback('Impossible de copier'); setFeedbackType('error'); } }}
-          >
-            Partager le résultat
-          </button>
-          <a className="btn" href={`/archive?day=${dayKey}`}>Voir l'archive</a>
-        </div>
-      )}
+      {/* Victory card */}
+      {showVictory && (
+        <div className="victory-card fade-in" ref={victoryRef}>
+          <div className="victory-header">
+            <div className="victory-emoji">🎉</div>
+            <h3 className="victory-title">Bravo !</h3>
+            <p className="victory-subtitle">
+              Enigme resolue en {history.length} essai{history.length !== 1 ? 's' : ''}
+            </p>
+          </div>
 
-      {solved && awardsToday?.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-          {awardsToday.map((a, i) => (
-            <span key={`${a.key}-${i}`} className="lb-pill" title={a.title || a.key}>
-              \uD83C\uDFC5 {a.title || a.key}
-            </span>
-          ))}
+          {/* Attempt bar visualization */}
+          <div className="victory-bar">
+            {[...[...history].reverse()].map((h, i) => (
+              <span key={i} className="victory-dot" style={{
+                background: h.result === 'correct' ? 'var(--success)' : h.result === 'low' ? '#2563eb' : h.result === 'high' ? 'var(--danger)' : 'var(--muted)',
+                animationDelay: `${i * 100}ms`
+              }} title={h.guess} />
+            ))}
+          </div>
+
+          {/* XP gained */}
+          <div className="victory-xp">
+            <span className="victory-xp-badge">+{xpGained} XP</span>
+            <div className="victory-level-info">
+              <span style={{ color: levelInfo.color, fontWeight: 700 }}>Niv. {levelInfo.level}</span>
+              <span style={{ color: 'var(--muted)', fontSize: 12 }}>{levelInfo.title}</span>
+            </div>
+            <div className="xp-bar-mini">
+              <div className="xp-bar-mini-fill" style={{ width: `${xpProgress * 100}%`, background: levelInfo.color }} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
+              {userXp} / {levelInfo.maxXp < 999999 ? levelInfo.maxXp : '∞'} XP
+            </div>
+          </div>
+
+          {/* Awards */}
+          {awardsToday?.length > 0 && (
+            <div className="victory-awards">
+              {awardsToday.map((a, i) => (
+                <span key={`${a.key}-${i}`} className="victory-award-pill">
+                  🏅 {a.title || a.key}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Share buttons */}
+          <div className="victory-actions">
+            {shareMsg && (
+              <button type="button" className="btn btn-primary" style={{ flex: 1 }}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(shareMsg);
+                    setFeedback('Resultat copie !');
+                    setFeedbackType('success');
+                  } catch {
+                    setFeedback('Impossible de copier');
+                    setFeedbackType('error');
+                  }
+                }}
+              >
+                📋 Partager
+              </button>
+            )}
+            <button type="button" className="btn" onClick={() => setShowVictory(false)} style={{ flex: 1 }}>
+              Fermer
+            </button>
+          </div>
         </div>
       )}
 
       {/* Feedback */}
-      {feedback && (
+      {feedback && !showVictory && (
         <div className={`feedback-msg ${feedbackType}`} style={{ marginBottom: 16 }}>
           {feedback}
         </div>
@@ -387,7 +495,7 @@ export default function Game({ session }) {
         <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--card-border)' }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Historique</h3>
           <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-            {loading ? "Chargement…" : `${history.length} tentative${history.length !== 1 ? 's' : ''}`}
+            {loading ? "Chargement..." : `${history.length} tentative${history.length !== 1 ? 's' : ''}`}
           </span>
         </div>
         <div style={{ padding: history.length ? '8px' : '16px' }}>
@@ -411,20 +519,23 @@ export default function Game({ session }) {
         </div>
       </div>
 
-      {/* Personal stats */}
+      {/* Personal stats with XP */}
       {!selfLoading && (
         <div className="stat-grid" style={{ marginTop: 16 }}>
           <div className="stat-card">
             <div className="stat-value">{streak}</div>
-            <div className="stat-label">Jour{streak > 1 ? 's' : ''} de série</div>
+            <div className="stat-label">Jour{streak > 1 ? 's' : ''} de serie</div>
           </div>
           <div className="stat-card">
             <div className="stat-value">{avgAttempts == null ? '—' : Number(avgAttempts).toFixed(1)}</div>
             <div className="stat-label">Moy. essais</div>
           </div>
-          <div className="stat-card">
-            <div className="stat-value">{history.length}</div>
-            <div className="stat-label">Essais aujourd'hui</div>
+          <div className="stat-card" style={{ position: 'relative' }}>
+            <div className="stat-value" style={{ color: levelInfo.color }}>Niv. {levelInfo.level}</div>
+            <div className="stat-label">{levelInfo.title}</div>
+            <div className="xp-bar-mini" style={{ marginTop: 6 }}>
+              <div className="xp-bar-mini-fill" style={{ width: `${xpProgress * 100}%`, background: levelInfo.color }} />
+            </div>
           </div>
         </div>
       )}
