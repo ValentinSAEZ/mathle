@@ -349,12 +349,12 @@ export default function AdminPanel({ onClose }) {
     <div
       role="dialog"
       aria-modal
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', padding: 12, zIndex: 60, display: 'grid' }}
+      className="admin-overlay"
       onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
     >
-      <div className="card" style={{ margin: 'auto', width: 'min(96vw, 860px)', display: 'grid', gridTemplateRows: 'auto 1fr auto', maxHeight: '90vh', overflow: 'hidden' }}>
+      <div className="admin-panel" style={{ display: 'grid', gridTemplateRows: 'auto auto 1fr auto', maxHeight: '85vh', overflow: 'hidden' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 16px', borderBottom: '1px solid var(--card-border)' }}>
           <h3 style={{ margin: 0 }}>Panneau d'administration</h3>
           <button className="btn" onClick={onClose}>Fermer</button>
         </div>
@@ -515,7 +515,7 @@ export default function AdminPanel({ onClose }) {
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ padding: '16px 0 0', borderTop: '1px solid var(--card-border)', display: 'flex', justifyContent: 'flex-end' }}>
           <button className="btn" onClick={onClose}>Fermer</button>
         </div>
       </div>

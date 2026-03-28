@@ -2,42 +2,34 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 function getUTCDateKey(d = new Date()) {
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 
 export default function ArchivePage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [limit, setLimit] = useState(30);
   const [offset, setOffset] = useState(0);
+  const limit = 30;
 
   const todayKey = useMemo(() => getUTCDateKey(), []);
 
   const load = async () => {
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
-      const { data, error } = await supabase.rpc('get_riddle_archive', {
-        p_limit: limit,
-        p_offset: offset,
-      });
+      const { data, error } = await supabase.rpc('get_riddle_archive', { p_limit: limit, p_offset: offset });
       if (error) throw error;
-      setRows(Array.isArray(data) ? data : (data ? [data] : []));
+      setRows(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
-      setError(e?.message || e?.error?.message || 'Impossible de charger les archives');
+      setError(e?.message || 'Impossible de charger les archives');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [limit, offset]);
+  useEffect(() => { load(); }, [offset]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto ouvrir une journée si ?day=YYYY-MM-DD
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const day = p.get('day');
@@ -50,55 +42,57 @@ export default function ArchivePage() {
   }, [rows]);
 
   return (
-    <div style={{ maxWidth: 900, margin: '20px auto', padding: '0 16px' }}>
-      <h2 className="page-title" style={{ marginTop: 12 }}>
-        <img
-          className="brand-inline"
-          src={`${process.env.PUBLIC_URL || ''}/brand/logo.png`}
-          alt="Logo"
-          onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.insertAdjacentText('afterbegin', '📚 '); }}
-        />
-        Archives des énigmes
+    <div className="page-container fade-in">
+      <h2 className="page-title">
+        <img className="brand-inline" src={`${process.env.PUBLIC_URL || ''}/brand/logo.png`} alt="Logo"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+        Archives
       </h2>
-      <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 10 }}>Jour courant (UTC): {todayKey}. Les archives affichent uniquement les jours passés.</div>
 
-      {loading && (<div>Chargement…</div>)}
-      {error && (<div style={{ color: '#dc2626', fontSize: 13 }}>{error}</div>)}
+      <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, textAlign: 'center' }}>
+        Jour courant (UTC): {todayKey}
+      </div>
+
+      {loading && <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>Chargement…</div>}
+      {error && <div style={{ color: 'var(--danger)', fontSize: 13, textAlign: 'center', padding: 20 }}>{error}</div>}
 
       {!loading && !error && rows.length === 0 && (
-        <div style={{ opacity: 0.7 }}>Aucune énigme archivée pour l’instant.</div>
+        <div style={{ textAlign: 'center', color: 'var(--muted)', padding: 40 }}>Aucune énigme archivée.</div>
       )}
 
       {!loading && !error && rows.length > 0 && (
-        <div style={{ display: 'grid', gap: 12 }}>
+        <div style={{ display: 'grid', gap: 10 }}>
           {rows.map((r) => (
-            <details key={r.day_key} id={`archive-${r.day_key}`} className="card" style={{ padding: 16 }}>
-              <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 600 }}>{r.day_key}</span>
-                <span style={{ opacity: 0.7, fontSize: 12 }}>({r.source})</span>
+            <details key={r.day_key} id={`archive-${r.day_key}`} className="card">
+              <summary>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{r.day_key}</span>
+                <span style={{ color: 'var(--muted)', fontSize: 12 }}>({r.source})</span>
               </summary>
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 16, lineHeight: 1.5, whiteSpace: 'pre-line' }}>{r.question}</div>
-                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div>
+                <div style={{ fontSize: 15, lineHeight: 1.6, whiteSpace: 'pre-line', marginBottom: 12 }}>{r.question}</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
                   <span className="lb-pill">Type: {r.type}</span>
                   <span className="lb-pill">Solution: <b>{r.answer}</b></span>
                 </div>
                 {r.explanation ? (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ fontWeight: 600 }}>Explication</div>
+                  <div style={{ background: 'var(--surface-subtle)', borderRadius: 'var(--radius-sm)', padding: 14, fontSize: 14, lineHeight: 1.5 }}>
+                    <div style={{ fontWeight: 600, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)', marginBottom: 6 }}>Explication</div>
                     <div style={{ whiteSpace: 'pre-line' }}>{r.explanation}</div>
                   </div>
                 ) : (
-                  <div style={{ marginTop: 12, opacity: 0.7, fontSize: 13 }}>
-                    (Pas d’explication renseignée pour ce jour)
-                  </div>
+                  <div style={{ color: 'var(--muted)', fontSize: 13 }}>Pas d'explication renseignée.</div>
                 )}
               </div>
             </details>
           ))}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-            <button className="btn" onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}>Précédent</button>
-            <button className="btn" onClick={() => setOffset(offset + limit)} disabled={rows.length < limit}>Suivant</button>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+            <button className="btn" onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}>
+              Précédent
+            </button>
+            <button className="btn" onClick={() => setOffset(offset + limit)} disabled={rows.length < limit}>
+              Suivant
+            </button>
           </div>
         </div>
       )}

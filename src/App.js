@@ -12,7 +12,7 @@ import StatsToday from "./components/StatsToday";
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [view, setView] = useState('home'); // 'home' | 'profile' | 'race' | 'archive'
+  const [view, setView] = useState('home');
   const [profileUserId, setProfileUserId] = useState(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -24,10 +24,8 @@ export default function App() {
 
   const handleSignOut = async () => {
     try {
-      // Prefer local sign-out to avoid network dependency
       await supabase.auth.signOut();
     } catch (e) {
-      // Fallback: clear local session state to unblock UI
       console.error('signOut error:', e);
     } finally {
       setSession(null);
@@ -45,7 +43,6 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // Apply theme to body
   useEffect(() => {
     const cls = document.body.classList;
     cls.remove('theme-dark');
@@ -53,8 +50,6 @@ export default function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Si un username a été saisi lors de l'inscription mais qu'il n'y avait pas de session
-  // (email confirmation), on le pousse dans `profiles` au premier login.
   useEffect(() => {
     if (!session) return;
     const raw = localStorage.getItem('pending_username');
@@ -75,7 +70,6 @@ export default function App() {
     }
   }, [session]);
 
-  // Charger le rôle admin depuis profiles
   useEffect(() => {
     (async () => {
       if (!session?.user?.id) { setIsAdmin(false); return; }
@@ -92,7 +86,6 @@ export default function App() {
     })();
   }, [session?.user?.id]);
 
-  // Charger l'état du mode Course (suspension)
   useEffect(() => {
     const load = async () => {
       try {
@@ -112,14 +105,13 @@ export default function App() {
     return () => window.removeEventListener('mathle:race-updated', onRace);
   }, []);
 
+  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+
   if (!session) return (
     <div>
       <Banner />
       <Auth onSignedIn={setSession} />
-      {/* Floating theme toggle (visible même sans session) */}
-      <button
-        className="theme-fab"
-        onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+      <button className="theme-fab" onClick={toggleTheme}
         title={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
         aria-label={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
       >
@@ -128,76 +120,108 @@ export default function App() {
     </div>
   );
 
+  const navItems = [
+    { key: 'home', label: 'Accueil', icon: '🏠' },
+    ...((!raceSuspended) ? [{ key: 'race', label: 'Course', icon: '🏁' }] : []),
+    { key: 'archive', label: 'Archives', icon: '📚' },
+    { key: 'profile', label: 'Profil', icon: '👤' },
+  ];
+
   return (
-    <div>
+    <div style={{ paddingBottom: 'env(safe-area-inset-bottom, 60px)' }}>
       <Banner />
+
+      {/* Top navigation bar */}
       <header className="topbar">
         <div className="nav-container">
-          <div className="brand" onClick={() => setView('home')} title="Aller à l’accueil">
-            <img
-              className="brand-logo"
+          <div className="brand" onClick={() => setView('home')} title="Accueil">
+            <img className="brand-logo"
               src={`${process.env.PUBLIC_URL || ''}/brand/logo.png`}
               alt="BrainteaserDay"
               onError={(e) => { e.currentTarget.src = `${process.env.PUBLIC_URL || ''}/logo192.png`; }}
             />
             <div className="brand-title">BrainteaserDay</div>
           </div>
+
+          {/* Desktop nav */}
           <div className="nav-actions">
             {isAdmin && (
               <button className="btn btn-soft btn-lg" onClick={() => setShowAdmin(true)}>Admin</button>
             )}
-            <button className="btn btn-soft btn-lg" onClick={() => setView(view === 'archive' ? 'home' : 'archive')}>
-              {view === 'archive' ? 'Accueil' : 'Archives'}
+            {navItems.map(item => (
+              <button key={item.key}
+                className={`btn btn-soft btn-lg ${view === item.key ? 'active' : ''}`}
+                onClick={() => {
+                  if (item.key === 'profile') { setProfileUserId(session.user.id); }
+                  setView(item.key);
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+            <button className="btn btn-primary btn-lg" onClick={handleSignOut}>
+              Quitter
             </button>
-            {!raceSuspended ? (
-              view !== 'race' ? (
-                <button className="btn btn-soft btn-lg" onClick={() => setView('race')}>Mode Course</button>
-              ) : (
-                <button className="btn btn-soft btn-lg" onClick={() => setView('home')}>Accueil</button>
-              )
-            ) : null}
-            {view !== 'profile' ? (
-              <button className="btn btn-soft btn-lg" onClick={() => { setProfileUserId(session.user.id); setView('profile'); }}>Profil</button>
-            ) : (
-              <button className="btn btn-soft btn-lg" onClick={() => setView('home')}>Accueil</button>
-            )}
-            <button className="btn btn-primary btn-lg" onClick={handleSignOut}>Se déconnecter</button>
           </div>
         </div>
       </header>
-      {view === 'home' ? (
-        <div className="home-grid">
-          <div>
-            <Game session={session} />
-            <StatsToday />
-          </div>
-          <div>
-            <Leaderboard onSelectUser={(uid) => { setProfileUserId(uid); setView('profile'); }} />
-          </div>
+
+      {/* Mobile bottom navigation */}
+      <nav className="mobile-nav">
+        <div className="mobile-nav-items">
+          {navItems.map(item => (
+            <button key={item.key}
+              className={`mobile-nav-btn ${view === item.key ? 'active' : ''}`}
+              onClick={() => {
+                if (item.key === 'profile') { setProfileUserId(session.user.id); }
+                setView(item.key);
+              }}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+          {isAdmin && (
+            <button className="mobile-nav-btn" onClick={() => setShowAdmin(true)}>
+              <span className="nav-icon">{'⚙️'}</span>
+              <span>Admin</span>
+            </button>
+          )}
         </div>
-      ) : view === 'profile' ? (
-        <ProfilePage session={session} userId={profileUserId || session.user.id} />
-      ) : view === 'archive' ? (
-        <ArchivePage />
-      ) : (
-        !raceSuspended ? (
-          <RaceGame session={session} />
-        ) : (
-          <div style={{ maxWidth: 900, margin: '20px auto', padding: '0 16px' }}>
-            <h2 style={{ marginTop: 12 }}>🏁 Mode Course</h2>
-            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: 16, padding: 16 }}>
-              Le mode Course est actuellement suspendu par un administrateur.
+      </nav>
+
+      {/* Page content */}
+      <div className="fade-in">
+        {view === 'home' ? (
+          <div className="home-grid">
+            <div style={{ display: 'grid', gap: 16 }}>
+              <Game session={session} />
+              <StatsToday />
+            </div>
+            <div>
+              <Leaderboard onSelectUser={(uid) => { setProfileUserId(uid); setView('profile'); }} />
             </div>
           </div>
-        )
-      )}
-      {showAdmin && (
-        <AdminPanel onClose={() => setShowAdmin(false)} />
-      )}
-      {/* Floating theme toggle */}
-      <button
-        className="theme-fab"
-        onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        ) : view === 'profile' ? (
+          <ProfilePage session={session} userId={profileUserId || session.user.id} />
+        ) : view === 'archive' ? (
+          <ArchivePage />
+        ) : view === 'race' ? (
+          !raceSuspended ? (
+            <RaceGame session={session} />
+          ) : (
+            <div className="page-container">
+              <div className="card section" style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: 16, color: 'var(--muted)' }}>Le mode Course est actuellement suspendu par un administrateur.</p>
+              </div>
+            </div>
+          )
+        ) : null}
+      </div>
+
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
+
+      <button className="theme-fab" onClick={toggleTheme}
         title={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
         aria-label={theme === 'dark' ? 'Passer en clair' : 'Passer en sombre'}
       >
