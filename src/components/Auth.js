@@ -9,6 +9,8 @@ export default function Auth({ onSignedIn }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
+  const [confirmSent, setConfirmSent] = useState(false);
+  const [confirmedEmail, setConfirmedEmail] = useState('');
 
   const submit = async (e) => {
     e.preventDefault();
@@ -36,7 +38,9 @@ export default function Auth({ onSignedIn }) {
         } else if (userId) {
           // pas de session (email de confirmation requis): sauvegarder localement
           localStorage.setItem('pending_username', JSON.stringify({ userId, username: username.trim() }));
-          setInfoMsg("Vérifiez votre email pour confirmer votre compte.");
+          setConfirmedEmail(email);
+          setConfirmSent(true);
+          return;
         }
       }
       onSignedIn?.(data?.session ?? null);
@@ -70,6 +74,50 @@ export default function Auth({ onSignedIn }) {
     setErrorMsg('');
     setInfoMsg('');
   };
+
+  if (confirmSent) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card" style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>📬</div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>Vérifie ta boîte mail !</h2>
+          <p style={{ color: 'var(--muted)', marginBottom: 6, fontSize: 15 }}>
+            Un email de confirmation a été envoyé à
+          </p>
+          <p style={{
+            fontWeight: 700,
+            fontSize: 15,
+            color: 'var(--primary)',
+            marginBottom: 20,
+            wordBreak: 'break-all',
+          }}>
+            {confirmedEmail}
+          </p>
+          <p style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.6, marginBottom: 28 }}>
+            Clique sur le lien dans l'email pour activer ton compte et commencer à résoudre les énigmes du jour. 🧠
+          </p>
+          <div style={{
+            background: 'var(--surface-subtle)',
+            borderRadius: 'var(--radius)',
+            padding: '14px 16px',
+            fontSize: 13,
+            color: 'var(--muted)',
+            marginBottom: 24,
+            textAlign: 'left',
+          }}>
+            💡 Tu ne vois pas l'email ? Vérifie ton dossier <strong>Spam</strong> ou <strong>Indésirables</strong>.
+          </div>
+          <button
+            className="btn"
+            onClick={() => { setConfirmSent(false); setMode('signin'); }}
+            style={{ width: '100%' }}
+          >
+            Retour à la connexion
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-page">
