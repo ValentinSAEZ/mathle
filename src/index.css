@@ -1639,10 +1639,9 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .admin-panel {
   width: 100%;
-  max-width: 700px;
+  max-width: 900px;
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
-  padding: 24px;
 }
