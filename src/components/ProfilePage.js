@@ -28,11 +28,18 @@ const AVATAR_COLORS = [
 ];
 
 const ACHIEVEMENT_META = {
-  first_solve: { icon: '🎯', label: 'Premiere resolution', desc: 'Resoudre sa premiere enigme' },
-  first_try: { icon: '⚡', label: '1er essai', desc: 'Reussir des le premier essai' },
-  streak_7: { icon: '🔥', label: 'Serie de 7 jours', desc: 'Resoudre 7 jours d\'affilee' },
-  streak_30: { icon: '🏆', label: 'Serie de 30 jours', desc: 'Resoudre 30 jours d\'affilee' },
-  no_hints: { icon: '🧠', label: 'Sans indices', desc: 'Reussir sans indices' },
+  // Énigme du jour
+  first_solve:    { icon: '🎯', label: 'Première résolution', desc: 'Résoudre sa première énigme' },
+  first_try:      { icon: '⚡', label: '1er essai',           desc: 'Réussir dès le premier essai' },
+  streak_7:       { icon: '🔥', label: 'Série de 7 jours',   desc: 'Résoudre 7 jours d\'affilée' },
+  streak_30:      { icon: '🏆', label: 'Série de 30 jours',  desc: 'Résoudre 30 jours d\'affilée' },
+  no_hints:       { icon: '🧠', label: 'Sans indices',        desc: 'Réussir sans aucune erreur' },
+  // Mode Course
+  race_first:     { icon: '🏁', label: 'Premier départ',     desc: 'Terminer sa première course' },
+  race_score_10:  { icon: '⚡', label: 'Décollage',          desc: 'Marquer 10 points en une course' },
+  race_score_25:  { icon: '🔥', label: 'En feu',             desc: 'Marquer 25 points en une course' },
+  race_hard:      { icon: '💪', label: 'Intrépide',          desc: 'Terminer une course en mode Difficile' },
+  race_perfect:   { icon: '🎯', label: 'Parfait !',          desc: 'Terminer une course sans erreur (min. 5 pts)' },
 };
 
 const ALL_ACHIEVEMENT_KEYS = Object.keys(ACHIEVEMENT_META);
