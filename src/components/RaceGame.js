@@ -2,6 +2,14 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { burstConfetti, bigCelebration } from '../lib/celebrate';
 
+function initialsOf(name) {
+  try {
+    const parts = String(name || '').trim().split(/[\s._-]+/).filter(Boolean);
+    if (parts.length === 0) return '?';
+    return ((parts[0][0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
+  } catch { return '?'; }
+}
+
 /* ── helpers ─────────────────────────────────────────────────── */
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
@@ -61,8 +69,60 @@ const RACE_ACHIEVEMENT_META = {
 
 const prefersReduced = () => { try { return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
+/* ── Leaderboard Course ───────────────────────────────────────── */
+function RaceLeaderboard({ level, duration, currentUserId }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    (async () => {
+      try {
+        const { data } = await supabase.rpc('get_race_leaderboard', { p_level: level, p_duration: duration });
+        if (mounted) setRows(Array.isArray(data) ? data : []);
+      } catch {}
+      finally { if (mounted) setLoading(false); }
+    })();
+    return () => { mounted = false; };
+  }, [level, duration]);
+
+  if (loading) return <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: 12 }}>Chargement…</div>;
+  if (rows.length === 0) return <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: 12 }}>Aucun score pour cette configuration</div>;
+
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      {rows.map((r, idx) => {
+        const isMe = r.user_id === currentUserId;
+        return (
+          <div key={r.user_id} style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10,
+            background: isMe ? 'var(--primary-soft)' : idx % 2 === 0 ? 'var(--surface-subtle)' : 'transparent',
+            border: isMe ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
+          }}>
+            <span style={{
+              width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 800, flexShrink: 0,
+              background: idx === 0 ? '#f59e0b' : idx === 1 ? '#94a3b8' : idx === 2 ? '#b45309' : 'var(--surface-subtle)',
+              color: idx < 3 ? '#fff' : 'var(--muted)',
+            }}>{idx + 1}</span>
+            <span style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--primary-soft)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+              {initialsOf(r.username)}
+            </span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: isMe ? 700 : 500, color: isMe ? 'var(--primary)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {r.username || '—'}{isMe ? ' (moi)' : ''}
+            </span>
+            <span style={{ fontWeight: 800, fontSize: 15, color: idx === 0 ? '#f59e0b' : 'var(--text)' }}>{r.score}</span>
+            <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 32, textAlign: 'right' }}>{r.accuracy}%</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ── End Screen ──────────────────────────────────────────────── */
-function EndScreen({ score, attempts, maxCombo, duration, level, personalBest, newAchievements, onRestart }) {
+function EndScreen({ score, attempts, maxCombo, duration, level, personalBest, newAchievements, onRestart, userId }) {
   const accuracy = attempts > 0 ? Math.round((score / attempts) * 100) : 0;
   const isNewRecord = personalBest === null || score > personalBest;
   const levelColor = LEVEL_COLORS[level];
@@ -150,9 +210,19 @@ function EndScreen({ score, attempts, maxCombo, duration, level, personalBest, n
         </span>
       </div>
 
-      <button className="btn btn-primary" onClick={onRestart} style={{ width: '100%', fontSize: 16, padding: '14px' }}>
+      <button className="btn btn-primary" onClick={onRestart} style={{ width: '100%', fontSize: 16, padding: '14px', marginBottom: 24 }}>
         🔄 Rejouer
       </button>
+
+      {/* Classement Course */}
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--card-border)', fontSize: 14, fontWeight: 700 }}>
+          🏆 Classement — {LEVEL_LABELS[level]} · {fmtTime(duration)}
+        </div>
+        <div style={{ padding: 10 }}>
+          <RaceLeaderboard level={level} duration={duration} currentUserId={userId} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -308,6 +378,7 @@ export default function RaceGame({ session }) {
           personalBest={personalBest}
           newAchievements={newAchievements}
           onRestart={() => { setShowEnd(false); start(); }}
+          userId={session?.user?.id}
         />
       </div>
     );
