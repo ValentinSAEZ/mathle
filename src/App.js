@@ -154,7 +154,7 @@ export default function App() {
   ];
 
   return (
-    <div style={{ paddingBottom: 'env(safe-area-inset-bottom, 60px)' }}>
+    <div style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)' }}>
       <Banner />
 
       {/* Top navigation bar */}

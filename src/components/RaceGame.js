@@ -391,47 +391,51 @@ export default function RaceGame({ session }) {
       {/* Config bar (hidden when running) */}
       {!running && (
         <div className="card section" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
-            {/* Difficulty */}
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>Difficulté</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {['easy', 'med', 'hard'].map(l => (
-                  <button key={l} onClick={() => setLevel(l)} style={{
-                    padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '2px solid',
-                    background: level === l ? LEVEL_COLORS[l] + '22' : 'transparent',
-                    borderColor: level === l ? LEVEL_COLORS[l] : 'var(--card-border)',
-                    color: level === l ? LEVEL_COLORS[l] : 'var(--muted)',
-                  }}>
-                    {LEVEL_LABELS[l]}
-                  </button>
-                ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+              {/* Difficulty */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>Difficulté</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {['easy', 'med', 'hard'].map(l => (
+                    <button key={l} onClick={() => setLevel(l)} style={{
+                      padding: '8px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '2px solid',
+                      background: level === l ? LEVEL_COLORS[l] + '22' : 'transparent',
+                      borderColor: level === l ? LEVEL_COLORS[l] : 'var(--card-border)',
+                      color: level === l ? LEVEL_COLORS[l] : 'var(--muted)',
+                      minHeight: 40,
+                    }}>
+                      {LEVEL_LABELS[l]}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-            {/* Duration */}
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>Durée</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {[30, 60, 120].map(d => (
-                  <button key={d} onClick={() => setDuration(d)} style={{
-                    padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '2px solid',
-                    background: duration === d ? '#6366f122' : 'transparent',
-                    borderColor: duration === d ? '#6366f1' : 'var(--card-border)',
-                    color: duration === d ? '#6366f1' : 'var(--muted)',
-                  }}>
-                    {d}s
-                  </button>
-                ))}
+              {/* Duration */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>Durée</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[30, 60, 120].map(d => (
+                    <button key={d} onClick={() => setDuration(d)} style={{
+                      padding: '8px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '2px solid',
+                      background: duration === d ? '#6366f122' : 'transparent',
+                      borderColor: duration === d ? '#6366f1' : 'var(--card-border)',
+                      color: duration === d ? '#6366f1' : 'var(--muted)',
+                      minHeight: 40,
+                    }}>
+                      {d}s
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             {/* Start */}
-            <div style={{ marginLeft: 'auto' }}>
+            <div>
               {personalBest !== null && (
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, textAlign: 'right' }}>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
                   Record : <strong style={{ color: 'var(--text)' }}>{personalBest} pts</strong>
                 </div>
               )}
-              <button className="btn btn-primary" onClick={start} style={{ fontSize: 16, padding: '10px 28px' }}>
+              <button className="btn btn-primary" onClick={start} style={{ fontSize: 16, padding: '12px 28px', width: '100%' }}>
                 Démarrer 🚀
               </button>
             </div>
@@ -460,14 +464,14 @@ export default function RaceGame({ session }) {
           </div>
 
           {/* HUD */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'nowrap' }}>
             {/* Timer */}
             <div style={{
               fontVariantNumeric: 'tabular-nums',
-              fontSize: 32, fontWeight: 900, lineHeight: 1,
+              fontSize: 'clamp(22px, 8vw, 32px)', fontWeight: 900, lineHeight: 1,
               color: isUrgent ? '#ef4444' : 'var(--text)',
               animation: isUrgent ? 'race-urgency-pulse 0.6s ease infinite' : 'none',
-              minWidth: 70,
+              minWidth: 'clamp(52px, 15vw, 70px)',
             }}>
               {fmtTime(timeLeft)}
             </div>
@@ -476,8 +480,8 @@ export default function RaceGame({ session }) {
 
             {/* Score */}
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 36, fontWeight: 900, lineHeight: 1, color: levelColor }}>{score}</div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Score</div>
+              <div style={{ fontSize: 'clamp(26px, 9vw, 36px)', fontWeight: 900, lineHeight: 1, color: levelColor }}>{score}</div>
+              <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Score</div>
             </div>
 
             {/* Combo badge */}
@@ -487,17 +491,17 @@ export default function RaceGame({ session }) {
                   : combo >= 5 ? 'linear-gradient(135deg, #6366f1, #a78bfa)'
                   : 'linear-gradient(135deg, #10b981, #06b6d4)',
                 color: '#fff', borderRadius: 12,
-                padding: '6px 12px', textAlign: 'center',
+                padding: '5px 10px', textAlign: 'center',
                 animation: 'combo-pop 0.2s ease',
-                minWidth: 60,
+                minWidth: 50,
               }}>
-                <div style={{ fontSize: 16, fontWeight: 900, lineHeight: 1 }}>×{combo}</div>
+                <div style={{ fontSize: 'clamp(13px, 4vw, 16px)', fontWeight: 900, lineHeight: 1 }}>×{combo}</div>
                 <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.5px', opacity: 0.9 }}>COMBO</div>
               </div>
             )}
 
             {/* Stop */}
-            <button className="btn" onClick={() => { setRunning(false); clearInterval(tickRef.current); setShowEnd(true); }} style={{ fontSize: 12 }}>
+            <button className="btn" onClick={() => { setRunning(false); clearInterval(tickRef.current); setShowEnd(true); }} style={{ fontSize: 12, padding: '8px 12px', minWidth: 56 }}>
               ✕ Stop
             </button>
           </div>
@@ -531,19 +535,20 @@ export default function RaceGame({ session }) {
           {eq.text} = ?
         </div>
 
-        <form onSubmit={submit} style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 20, maxWidth: 280, margin: '20px auto 0' }}>
+        <form onSubmit={submit} style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 20, maxWidth: 300, margin: '20px auto 0' }}>
           <input
             ref={inputRef}
             type="number"
+            inputMode="numeric"
             value={input}
             onChange={e => setInput(e.target.value)}
             placeholder="?"
             disabled={!running || timeLeft <= 0}
             className="input"
-            style={{ fontSize: 22, textAlign: 'center', fontWeight: 700, flex: 1 }}
+            style={{ fontSize: 22, textAlign: 'center', fontWeight: 700, flex: 1, minHeight: 52 }}
             autoComplete="off"
           />
-          <button type="submit" className="btn btn-primary" disabled={!running || timeLeft <= 0} style={{ padding: '10px 20px', fontSize: 16 }}>
+          <button type="submit" className="btn btn-primary" disabled={!running || timeLeft <= 0} style={{ padding: '10px 20px', fontSize: 18, minHeight: 52, minWidth: 52 }}>
             ✓
           </button>
         </form>

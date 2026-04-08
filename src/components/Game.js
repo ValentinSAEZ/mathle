@@ -393,12 +393,13 @@ export default function Game({ session }) {
               <form onSubmit={e => handleSubmit(e, activeRiddle)} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                 <input
                   type="text"
+                  inputMode="decimal"
                   value={rs.guess}
                   onChange={e => updateRiddleState(activeRiddle.riddle_id, { guess: e.target.value })}
                   placeholder="Ta réponse"
                   disabled={rs.solved || isBanned}
                   className="input"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, fontSize: 16 }}
                 />
                 <button
                   ref={submitBtnRef}
@@ -406,7 +407,7 @@ export default function Game({ session }) {
                   onClick={rs.solved ? () => { if (!prefersReducedMotion()) burstConfetti({ originEl: submitBtnRef.current }); pulseOnce(submitBtnRef.current); } : undefined}
                   disabled={isBanned}
                   className={`btn ${rs.solved ? 'btn-finished' : 'btn-primary'}`}
-                  style={{ padding: '10px 24px' }}
+                  style={{ padding: '10px 20px', minHeight: 44, flexShrink: 0 }}
                 >
                   {isBanned ? "Banni" : (rs.solved ? "✓" : "Valider")}
                 </button>

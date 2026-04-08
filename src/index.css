@@ -54,9 +54,12 @@ body {
   color: var(--text);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
   line-height: 1.5;
   min-height: 100vh;
   transition: background var(--transition), color var(--transition);
+  /* Prevent double-tap zoom on interactive elements */
+  touch-action: manipulation;
 }
 
 /* ===== Typography ===== */
@@ -1561,41 +1564,56 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 @media (max-width: 640px) {
+  /* ─── Topbar ─────────────────────────────── */
   .nav-container { padding: 0 12px; height: 48px; }
   .brand-title { font-size: 15px; }
   .brand-logo { width: 24px; height: 24px; }
-
-  /* Hide desktop nav actions on mobile */
   .nav-actions { display: none; }
-
-  /* Show bottom nav on mobile */
   .mobile-nav { display: block; }
 
-  .home-grid { padding: 12px; gap: 12px; }
-  .page-container { padding: 16px 12px; }
-  .page-title { font-size: 18px; margin-bottom: 16px; }
+  /* ─── Layout ─────────────────────────────── */
+  .home-grid { padding: 10px; gap: 10px; }
+  .page-container { padding: 14px 10px; }
+  .page-title { font-size: 18px; margin-bottom: 14px; }
+  .section { padding: 14px; }
 
-  .auth-card { padding: 24px 20px 20px; border-radius: var(--radius-lg); }
+  /* ─── Theme FAB ──────────────────────────── */
+  .theme-fab { right: 12px; bottom: 80px; width: 40px; height: 40px; font-size: 16px; }
+
+  /* ─── Auth ───────────────────────────────── */
+  .auth-card { padding: 24px 16px 20px; border-radius: var(--radius-lg); }
   .auth-title { font-size: 20px; }
 
-  .section { padding: 16px; }
-
-  .theme-fab { right: 12px; bottom: 72px; width: 40px; height: 40px; }
-
-  .lb-row { grid-template-columns: 28px 1fr auto; gap: 8px; padding: 8px 10px; }
+  /* ─── Leaderboard rows ───────────────────── */
+  .lb-row {
+    grid-template-columns: 26px 1fr auto auto;
+    gap: 6px; padding: 8px 10px;
+    min-height: 44px;
+  }
   .lb-avatar { display: none; }
+  .lb-name { font-size: 13px; }
+  .lb-pill { font-size: 11px; padding: 3px 7px; }
 
+  /* ─── Stats ──────────────────────────────── */
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .stat-card { padding: 12px 10px; }
+  .stat-card .stat-value { font-size: 20px; }
 
-  .question-card { padding: 18px; font-size: 15px; }
-  .race-equation { font-size: 26px; padding: 16px; }
+  /* ─── Game question ──────────────────────── */
+  .question-card { padding: 16px 14px; font-size: 14px; }
 
+  /* ─── Race ───────────────────────────────── */
+  .race-equation { font-size: 22px; padding: 14px; }
+  .race-end-screen { padding: 0; }
+
+  /* ─── Archive completion grid ────────────── */
   .completion-grid { grid-template-columns: repeat(7, 14px); gap: 3px; }
   .completion-square { width: 14px; height: 14px; }
+  .completion-grid-labels { display: none; }
 
-  /* Profile mobile */
+  /* ─── Profile ────────────────────────────── */
   .profile-banner { height: 70px; }
-  .profile-header-content { padding: 0 16px 12px; gap: 12px; margin-top: -28px; }
+  .profile-header-content { padding: 0 14px 12px; gap: 12px; margin-top: -28px; }
   .profile-avatar-lg { width: 56px; height: 56px; font-size: 20px; }
   .profile-identity { padding-top: 32px; }
   .profile-name { font-size: 17px; }
@@ -1605,18 +1623,22 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
   .profile-tabs { padding: 8px 0; gap: 4px; }
   .profile-tab { padding: 6px 12px; font-size: 12px; }
 
-  /* Forum mobile */
+  /* ─── Forum ──────────────────────────────── */
   .forum-day-nav { flex-wrap: wrap; gap: 8px; }
   .forum-day-btn { font-size: 12px; padding: 6px 10px; }
   .forum-day-label { font-size: 14px; }
   .forum-post { padding: 12px; }
 
-  .completion-grid-labels { display: none; }
+  /* ─── Generic touch targets ──────────────── */
+  .btn { min-height: 40px; }
+  .input { font-size: 16px; } /* Prevent iOS auto-zoom on focus */
 }
 
 @media (max-width: 360px) {
   .stat-grid { grid-template-columns: 1fr 1fr; }
-  .lb-row { grid-template-columns: 24px 1fr auto; }
+  .lb-row { grid-template-columns: 22px 1fr auto; gap: 4px; }
+  .lb-pill:last-child { display: none; } /* Hide 2nd pill on tiny screens */
+  .home-grid { padding: 8px; gap: 8px; }
 }
 
 /* ===== Smooth fade-in for page content ===== */
