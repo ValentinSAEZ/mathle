@@ -133,7 +133,7 @@ export default function Leaderboard({ onSelectUser }) {
 
   // Tabs à afficher
   const tabs = [
-    { key: 'general', label: '🏆 Général' },
+    { key: 'general', label: '🏆 Global' },
     ...themes.map(t => {
       const meta = RIDDLE_THEMES[t] || RIDDLE_THEMES.general;
       return { key: t, label: `${meta.icon} ${meta.label}` };

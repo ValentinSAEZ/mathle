@@ -28,18 +28,23 @@ const AVATAR_COLORS = [
 ];
 
 const ACHIEVEMENT_META = {
-  // Énigme du jour
-  first_solve:    { icon: '🎯', label: 'Première résolution', desc: 'Résoudre sa première énigme' },
-  first_try:      { icon: '⚡', label: '1er essai',           desc: 'Réussir dès le premier essai' },
-  streak_7:       { icon: '🔥', label: 'Série de 7 jours',   desc: 'Résoudre 7 jours d\'affilée' },
-  streak_30:      { icon: '🏆', label: 'Série de 30 jours',  desc: 'Résoudre 30 jours d\'affilée' },
-  no_hints:       { icon: '🧠', label: 'Sans indices',        desc: 'Réussir sans aucune erreur' },
-  // Mode Course
-  race_first:     { icon: '🏁', label: 'Premier départ',     desc: 'Terminer sa première course' },
-  race_score_10:  { icon: '⚡', label: 'Décollage',          desc: 'Marquer 10 points en une course' },
-  race_score_25:  { icon: '🔥', label: 'En feu',             desc: 'Marquer 25 points en une course' },
-  race_hard:      { icon: '💪', label: 'Intrépide',          desc: 'Terminer une course en mode Difficile' },
-  race_perfect:   { icon: '🎯', label: 'Parfait !',          desc: 'Terminer une course sans erreur (min. 5 pts)' },
+  // ─── Énigmes du jour ────────────────────────────────────────────
+  first_solve:   { icon: '🎯', label: 'Première résolution', desc: 'Résoudre sa toute première énigme' },
+  first_try:     { icon: '⚡', label: 'Du premier coup',     desc: 'Réussir une énigme dès le 1er essai' },
+  three_of_six:  { icon: '🌟', label: 'Mi-chemin',           desc: 'Résoudre 3 énigmes dans la même journée' },
+  all_six:       { icon: '💎', label: 'Journée parfaite',    desc: 'Résoudre les 6 énigmes du jour' },
+  comeback:      { icon: '🔄', label: 'Comeback',            desc: 'Résoudre une énigme après 3 erreurs ou plus' },
+  perfectionist: { icon: '🎪', label: 'Perfectionniste',     desc: 'Résoudre 5 énigmes du même jour en 1 essai chacune' },
+  all_themes:    { icon: '🌈', label: 'Touche-à-tout',       desc: 'Résoudre au moins une énigme de chaque catégorie' },
+  // ─── Séries ──────────────────────────────────────────────────────
+  streak_7:      { icon: '🔥', label: 'Série de 7 jours',   desc: 'Résoudre au moins une énigme 7 jours d\'affilée' },
+  streak_30:     { icon: '🏆', label: 'Série de 30 jours',  desc: 'Résoudre au moins une énigme 30 jours d\'affilée' },
+  // ─── Mode Course ─────────────────────────────────────────────────
+  race_first:    { icon: '🏁', label: 'Premier départ',     desc: 'Terminer sa première course' },
+  race_score_10: { icon: '💨', label: 'Décollage',          desc: 'Marquer 10 points en une course' },
+  race_score_25: { icon: '🔥', label: 'En feu',             desc: 'Marquer 25 points en une course' },
+  race_hard:     { icon: '💪', label: 'Intrépide',          desc: 'Terminer une course en mode Difficile' },
+  race_perfect:  { icon: '🎯', label: 'Parfait !',          desc: 'Terminer une course sans erreur (min. 5 pts)' },
 };
 
 const ALL_ACHIEVEMENT_KEYS = Object.keys(ACHIEVEMENT_META);

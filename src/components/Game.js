@@ -339,7 +339,7 @@ export default function Game({ session }) {
         <div className="question-card" style={{ textAlign: 'center', color: 'var(--muted)' }}>Aucune énigme disponible pour le moment.</div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
             {riddles.map(r => {
               const t = RIDDLE_THEMES[r.theme] || RIDDLE_THEMES.general;
               const rsSt = riddleStates[r.riddle_id] || initRiddleState();
