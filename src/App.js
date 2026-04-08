@@ -15,6 +15,7 @@ import StatsToday from "./components/StatsToday";
 export default function App() {
   const [session, setSession] = useState(null);
   const [view, setView] = useState('home');
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [profileUserId, setProfileUserId] = useState(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -224,8 +225,16 @@ export default function App() {
               <Game session={session} />
               <StatsToday />
             </div>
-            <div>
-              <Leaderboard onSelectUser={(uid) => { setProfileUserId(uid); setView('profile'); }} />
+            <div className="leaderboard-col">
+              <button
+                className="leaderboard-toggle-btn"
+                onClick={() => setShowLeaderboard(v => !v)}
+              >
+                🏆 {showLeaderboard ? 'Masquer le classement ▲' : 'Voir le classement ▼'}
+              </button>
+              <div className={showLeaderboard ? 'leaderboard-visible' : 'leaderboard-hidden'}>
+                <Leaderboard onSelectUser={(uid) => { setProfileUserId(uid); setView('profile'); }} />
+              </div>
             </div>
           </div>
         ) : view === 'profile' ? (

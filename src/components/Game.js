@@ -339,7 +339,7 @@ export default function Game({ session }) {
         <div className="question-card" style={{ textAlign: 'center', color: 'var(--muted)' }}>Aucune énigme disponible pour le moment.</div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 8, marginBottom: 16 }}>
             {riddles.map(r => {
               const t = RIDDLE_THEMES[r.theme] || RIDDLE_THEMES.general;
               const rsSt = riddleStates[r.riddle_id] || initRiddleState();
@@ -390,7 +390,7 @@ export default function Game({ session }) {
               </div>
 
               {/* Formulaire */}
-              <form onSubmit={e => handleSubmit(e, activeRiddle)} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <form onSubmit={e => handleSubmit(e, activeRiddle)} className="answer-form" style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                 <input
                   type="text"
                   inputMode="decimal"
