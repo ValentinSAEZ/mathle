@@ -148,6 +148,80 @@ useEffect(() => {
   };
 }, [targetUserId, selfUser?.created_at]);
 
+// Load completions
+useEffect(() => {
+  let mounted = true;
+
+  (async () => {
+    if (!targetUserId) return;
+
+    try {
+      const { data } = await supabase
+        .from('attempts')
+        .select('day_key, result')
+        .eq('user_id', targetUserId)
+        .gte('day_key', dateKeyUTC(start))
+        .lte('day_key', dateKeyUTC(end));
+
+      if (!mounted) return;
+
+      const m = new Map();
+
+      for (const row of data || []) {
+        const key = String(row.day_key);
+
+        if (row.result === 'correct') {
+          m.set(key, true);
+        } else if (!m.has(key)) {
+          m.set(key, false);
+        }
+      }
+
+      setSolvedMap(m);
+    } catch (error) {
+      console.error('Unable to load completions:', error);
+    }
+  })();
+
+  return () => {
+    mounted = false;
+  };
+}, [targetUserId, start, end]);
+
+
+// Load race runs
+useEffect(() => {
+  let mounted = true;
+
+  (async () => {
+    if (!targetUserId) return;
+
+    try {
+      const { data } = await supabase
+        .from('race_runs')
+        .select('created_at, duration, level, score, attempts')
+        .eq('user_id', targetUserId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (mounted) {
+        setRaceRuns(data || []);
+      }
+    } catch (error) {
+      console.error('Unable to load race runs:', error);
+    }
+  })();
+
+  return () => {
+    mounted = false;
+  };
+}, [targetUserId]);
+
+
+
+
+
+
   // Load achievements
   useEffect(() => {
     let mounted = true;
