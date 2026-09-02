@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { getLevelInfo, getXpProgress } from '../lib/celebrate';
+const API_URL = 'https://api.brainteaserday.com';
+
+
 
 function fmtDate(d) {
   try { return new Date(d).toLocaleDateString([], { year: 'numeric', month: 'short', day: '2-digit' }); } catch { return ''; }
@@ -106,64 +109,44 @@ export default function ProfilePage({ session, userId }) {
   }, [range, solvedMap]);
 
   // Load profile
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!targetUserId) return;
-      try {
-        const { data, error } = await supabase.from('profiles').select('username, created_at, is_admin, bio, avatar_color, xp').eq('id', targetUserId).maybeSingle();
-        if (error) throw error;
-        if (!mounted) return;
-        setUsername(data?.username || '');
-        setBio(data?.bio || '');
-        setAvatarColor(data?.avatar_color || '#6366f1');
-        setCreatedAt(data?.created_at || selfUser?.created_at || '');
-        setIsAdminTarget(Boolean(data?.is_admin));
-        setUserXp(data?.xp || 0);
-      } catch (e) {
-        if (mounted) setMessage("Impossible de charger le profil");
-      }
-    })();
-    return () => { mounted = false; };
-  }, [targetUserId]); // eslint-disable-line react-hooks/exhaustive-deps
+useEffect(() => {
+  let mounted = true;
 
-  // Load completions
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!targetUserId) return;
-      try {
-        const { data, error } = await supabase.from('user_completions').select('day_key, solved').eq('user_id', targetUserId).gte('day_key', dateKeyUTC(start)).lte('day_key', dateKeyUTC(end));
-        if (error) throw error;
-        if (!mounted) return;
-        const m = new Map();
-        for (const row of data || []) m.set(String(row.day_key), Boolean(row.solved));
-        setSolvedMap(m);
-      } catch {
-        try {
-          const { data } = await supabase.from('attempts').select('day_key, result').eq('user_id', targetUserId).gte('day_key', dateKeyUTC(start)).lte('day_key', dateKeyUTC(end));
-          if (!mounted) return;
-          const m = new Map();
-          for (const row of data || []) { const k = String(row.day_key); if (row.result === 'correct') m.set(k, true); else if (!m.has(k)) m.set(k, false); }
-          setSolvedMap(m);
-        } catch {}
-      }
-    })();
-    return () => { mounted = false; };
-  }, [targetUserId, start, end]);
+  (async () => {
+    if (!targetUserId) return;
 
-  // Load race runs
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!targetUserId) return;
-      try {
-        const { data } = await supabase.from('race_runs').select('created_at, duration, level, score, attempts').eq('user_id', targetUserId).order('created_at', { ascending: false }).limit(10);
-        if (mounted) setRaceRuns(data || []);
-      } catch {}
-    })();
-    return () => { mounted = false; };
-  }, [targetUserId]);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/profiles/${targetUserId}`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Impossible de charger le profil');
+      }
+
+      if (!mounted) return;
+
+      const profile = data.profile;
+
+      setUsername(profile?.username || '');
+      setBio(profile?.bio || '');
+      setAvatarColor(profile?.avatar_color || '#6366f1');
+      setCreatedAt(profile?.created_at || selfUser?.created_at || '');
+      setIsAdminTarget(Boolean(profile?.is_admin));
+      setUserXp(profile?.xp || 0);
+    } catch {
+      if (mounted) {
+        setMessage("Impossible de charger le profil");
+      }
+    }
+  })();
+
+  return () => {
+    mounted = false;
+  };
+}, [targetUserId, selfUser?.created_at]);
 
   // Load achievements
   useEffect(() => {
@@ -192,53 +175,116 @@ export default function ProfilePage({ session, userId }) {
     setMessage('');
   }, [username, bio, avatarColor]);
 
-  const save = async (e) => {
-    e?.preventDefault?.();
-    if (!selfUser?.id || !isSelf) return;
-    setSaving(true); setMessage('');
-    try {
-      const { error } = await supabase.from('profiles')
-        .update({
+const save = async (e) => {
+  e?.preventDefault?.();
+
+  if (!selfUser?.id || !isSelf) return;
+
+  setSaving(true);
+  setMessage('');
+
+  try {
+    const token = localStorage.getItem('auth_token');
+
+    const response = await fetch(
+      `${API_URL}/api/me/profile`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
           username: editUsername.trim(),
           bio: editBio.trim(),
           avatar_color: editColor,
-        })
-        .eq('id', selfUser.id);
-      if (error) throw error;
-      setUsername(editUsername.trim());
-      setBio(editBio.trim());
-      setAvatarColor(editColor);
-      setMessage('Profil enregistre !');
-      setEditing(false);
-    } catch {
-      setMessage("Echec de l'enregistrement");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const changePassword = async (e) => {
-    e?.preventDefault?.();
-    if (!session?.user) return;
-    setPwMsg('');
-    if (pw1 !== pw2) { setPwMsg('Les mots de passe ne correspondent pas.'); return; }
-    if ((pw1 || '').length < 6) { setPwMsg('Au moins 6 caracteres requis.'); return; }
-    setPwSaving(true);
-    try {
-      if (pwCurrent) {
-        const { error: reauthErr } = await supabase.auth.signInWithPassword({ email: session.user.email, password: pwCurrent });
-        if (reauthErr) { setPwMsg('Mot de passe actuel incorrect.'); setPwSaving(false); return; }
+        }),
       }
-      const { error } = await supabase.auth.updateUser({ password: pw1 });
-      if (error) throw error;
-      setPwMsg('Mot de passe mis a jour !');
-      setPwCurrent(''); setPw1(''); setPw2('');
-    } catch (err) {
-      setPwMsg(err?.message || 'Impossible de mettre a jour.');
-    } finally {
-      setPwSaving(false);
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || "Échec de l'enregistrement");
     }
-  };
+
+    const profile = data.profile;
+
+    setUsername(profile.username || '');
+    setBio(profile.bio || '');
+    setAvatarColor(profile.avatar_color || '#6366f1');
+
+    setMessage('Profil enregistré !');
+    setEditing(false);
+  } catch (err) {
+    setMessage(err?.message || "Échec de l'enregistrement");
+  } finally {
+    setSaving(false);
+  }
+};
+
+
+const changePassword = async (e) => {
+  e?.preventDefault?.();
+
+  setPwMsg('');
+
+  if (pw1 !== pw2) {
+    setPwMsg('Les mots de passe ne correspondent pas.');
+    return;
+  }
+
+  if ((pw1 || '').length < 8) {
+    setPwMsg('Au moins 8 caractères requis.');
+    return;
+  }
+
+  if (!pwCurrent) {
+    setPwMsg('Saisissez votre mot de passe actuel.');
+    return;
+  }
+
+  setPwSaving(true);
+
+  try {
+    const token = localStorage.getItem('auth_token');
+
+    const response = await fetch(
+      `${API_URL}/api/me/password`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword: pwCurrent,
+          newPassword: pw1,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error || 'Impossible de modifier le mot de passe.'
+      );
+    }
+
+    setPwMsg('Mot de passe mis à jour !');
+    setPwCurrent('');
+    setPw1('');
+    setPw2('');
+  } catch (err) {
+    setPwMsg(
+      err?.message || 'Impossible de modifier le mot de passe.'
+    );
+  } finally {
+    setPwSaving(false);
+  }
+};
+
 
   const earnedKeys = useMemo(() => new Set(achievements.map(a => a.key)), [achievements]);
 

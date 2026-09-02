@@ -266,6 +266,198 @@ app.get('/api/me', requireAuth, async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────
+// PROFILS
+// ─────────────────────────────────────────────
+
+// Profil public d'un utilisateur
+app.get('/api/profiles/:id', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        username,
+        created_at,
+        is_admin,
+        bio,
+        avatar_color,
+        xp
+      FROM profiles
+      WHERE id = $1
+      `,
+      [req.params.id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: 'Profil introuvable.',
+      });
+    }
+
+    res.json({
+      profile: result.rows[0],
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Erreur lors du chargement du profil.',
+    });
+  }
+});
+
+
+// Modifier son propre profil
+app.patch('/api/me/profile', requireAuth, async (req, res) => {
+  const { username, bio, avatar_color } = req.body;
+
+  const cleanUsername = String(username || '').trim();
+  const cleanBio = String(bio || '').trim();
+  const cleanColor = String(avatar_color || '#6366f1').trim();
+
+  if (!cleanUsername) {
+    return res.status(400).json({
+      error: "Le nom d'utilisateur est requis.",
+    });
+  }
+
+  if (cleanUsername.length > 50) {
+    return res.status(400).json({
+      error: "Le nom d'utilisateur est trop long.",
+    });
+  }
+
+  if (cleanBio.length > 200) {
+    return res.status(400).json({
+      error: 'La bio ne peut pas dépasser 200 caractères.',
+    });
+  }
+
+  if (!/^#[0-9a-fA-F]{6}$/.test(cleanColor)) {
+    return res.status(400).json({
+      error: "Couleur d'avatar invalide.",
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE profiles
+      SET
+        username = $1,
+        bio = $2,
+        avatar_color = $3
+      WHERE id = $4
+      RETURNING
+        id,
+        username,
+        created_at,
+        is_admin,
+        bio,
+        avatar_color,
+        xp
+      `,
+      [
+        cleanUsername,
+        cleanBio,
+        cleanColor,
+        req.user.id,
+      ]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: 'Profil introuvable.',
+      });
+    }
+
+    res.json({
+      profile: result.rows[0],
+    });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({
+        error: "Ce nom d'utilisateur est déjà utilisé.",
+      });
+    }
+
+    console.error(error);
+
+    res.status(500).json({
+      error: "Impossible d'enregistrer le profil.",
+    });
+  }
+});
+
+
+// Changer son mot de passe
+app.post('/api/me/password', requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({
+      error: 'Mot de passe actuel et nouveau mot de passe requis.',
+    });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({
+      error: 'Le nouveau mot de passe doit contenir au moins 8 caractères.',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT password_hash
+      FROM users
+      WHERE id = $1
+      `,
+      [req.user.id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: 'Utilisateur introuvable.',
+      });
+    }
+
+    const valid = await bcrypt.compare(
+      currentPassword,
+      result.rows[0].password_hash
+    );
+
+    if (!valid) {
+      return res.status(401).json({
+        error: 'Mot de passe actuel incorrect.',
+      });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+
+    await pool.query(
+      `
+      UPDATE users
+      SET password_hash = $1
+      WHERE id = $2
+      `,
+      [newHash, req.user.id]
+    );
+
+    res.json({
+      ok: true,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de modifier le mot de passe.',
+    });
+  }
+});
+
+
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`API Brainteaserday sur http://127.0.0.1:${PORT}`);
 });
