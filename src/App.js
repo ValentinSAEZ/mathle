@@ -11,6 +11,9 @@ import ArchivePage from "./components/ArchivePage";
 import ForumPage from "./components/ForumPage";
 import LandingPage from "./components/LandingPage";
 import StatsToday from "./components/StatsToday";
+const API_URL = 'https://api.brainteaserday.com';
+
+
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -30,31 +33,44 @@ export default function App() {
     return t === 'dark' ? 'dark' : 'light';
   });
 
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.error('signOut error:', e);
-    } finally {
-      setSession(null);
-      setShowAdmin(false);
-      setView('home');
-    }
+  const handleSignOut = () => {
+  	localStorage.removeItem('auth_token');
+  	setSession(null);
+  	setShowAdmin(false);
+  	setView('home');
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (error) console.error(error);
-      setSession(data?.session ?? null);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
-      setSession(s ?? null);
-      if (event === 'PASSWORD_RECOVERY') {
-        setShowPasswordReset(true);
+  const token = localStorage.getItem('auth_token');
+
+  if (!token) {
+    setSession(null);
+    return;
+  }
+
+  fetch(`${API_URL}/api/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error('Session invalide');
       }
+
+      return response.json();
+    })
+    .then((data) => {
+      setSession({
+        access_token: token,
+        user: data.user,
+      });
+    })
+    .catch(() => {
+      localStorage.removeItem('auth_token');
+      setSession(null);
     });
-    return () => sub.subscription.unsubscribe();
-  }, []);
+}, []);
 
   useEffect(() => {
     const cls = document.body.classList;
@@ -84,20 +100,8 @@ export default function App() {
   }, [session]);
 
   useEffect(() => {
-    (async () => {
-      if (!session?.user?.id) { setIsAdmin(false); return; }
-      try {
-        const { data } = await supabase
-          .from('profiles')
-          .select('is_admin')
-          .eq('id', session.user.id)
-          .maybeSingle();
-        setIsAdmin(Boolean(data?.is_admin));
-      } catch {
-        setIsAdmin(false);
-      }
-    })();
-  }, [session?.user?.id]);
+  setIsAdmin(Boolean(session?.user?.is_admin));
+}, [session]);
 
   useEffect(() => {
     const load = async () => {
