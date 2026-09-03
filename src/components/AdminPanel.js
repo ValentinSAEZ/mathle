@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { RIDDLE_THEMES } from '../lib/celebrate';
+const API_URL = 'https://api.brainteaserday.com';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 function getUTCDateKey() {
@@ -572,27 +573,80 @@ function BannerTab() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await supabase.from('site_banner').select('active, message').eq('id', 1).maybeSingle();
-        if (data) { setActive(Boolean(data.active)); setMessage(data.message || ''); }
-      } catch {}
-    })();
-  }, []);
-
-  const save = async (e) => {
-    e?.preventDefault?.();
-    setSaving(true); setMsg('');
+useEffect(() => {
+  (async () => {
     try {
-      const { error } = await supabase.rpc('admin_set_banner', { p_active: active, p_message: message });
-      if (error) throw error;
-      setMsg('Bandeau enregistré ✅');
-      window.dispatchEvent(new CustomEvent('mathle:banner-updated'));
-    } catch (e) {
-      setMsg(`Échec — ${e?.message || ''}`);
-    } finally { setSaving(false); }
-  };
+      const response = await fetch(
+        `${API_URL}/api/banner`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || 'Bandeau indisponible'
+        );
+      }
+
+      setActive(Boolean(data.active));
+      setMessage(data.message || '');
+    } catch (error) {
+      console.error(error);
+    }
+  })();
+}, []);
+
+const save = async (e) => {
+  e?.preventDefault?.();
+
+  setSaving(true);
+  setMsg('');
+
+  try {
+    const token =
+      localStorage.getItem('auth_token');
+
+    const response = await fetch(
+      `${API_URL}/api/admin/banner`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type':
+            'application/json',
+          Authorization:
+            `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          active,
+          message,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error ||
+        'Impossible de modifier le bandeau'
+      );
+    }
+
+    setMsg('Bandeau enregistré ✅');
+
+    window.dispatchEvent(
+      new CustomEvent(
+        'mathle:banner-updated'
+      )
+    );
+  } catch (error) {
+    setMsg(
+      `Échec — ${error?.message || ''}`
+    );
+  } finally {
+    setSaving(false);
+  }
+};
 
   return (
     <form onSubmit={save} style={{ display: 'grid', gap: 16 }}>

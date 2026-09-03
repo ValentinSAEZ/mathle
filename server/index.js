@@ -56,6 +56,36 @@ function requireAuth(req, res, next) {
   }
 }
 
+async function requireAdmin(req, res, next) {
+  try {
+    const result = await pool.query(
+      `
+      SELECT is_admin
+      FROM profiles
+      WHERE id = $1
+      `,
+      [req.user.id]
+    );
+
+    if (
+      result.rowCount === 0 ||
+      !result.rows[0].is_admin
+    ) {
+      return res.status(403).json({
+        error: 'Accès administrateur requis.',
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de vérifier les droits administrateur.',
+    });
+  }
+}
+
 app.get('/api/health', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW() AS now');
@@ -1996,7 +2026,87 @@ app.get('/api/profiles/:id/activity', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────
+// BANDEAU
+// ─────────────────────────────────────────────
 
+app.get('/api/banner', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT active, message
+      FROM site_banner
+      WHERE id = 1
+      `
+    );
+
+    res.json({
+      active: Boolean(result.rows[0]?.active),
+      message: result.rows[0]?.message || '',
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de charger le bandeau.',
+    });
+  }
+});
+
+
+app.put(
+  '/api/admin/banner',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const active = Boolean(req.body.active);
+    const message = String(
+      req.body.message || ''
+    ).trim();
+
+    if (message.length > 1000) {
+      return res.status(400).json({
+        error: 'Message trop long.',
+      });
+    }
+
+    try {
+      const result = await pool.query(
+        `
+        INSERT INTO site_banner (
+          id,
+          active,
+          message,
+          updated_at
+        )
+        VALUES (
+          1,
+          $1,
+          $2,
+          NOW()
+        )
+
+        ON CONFLICT (id)
+        DO UPDATE SET
+          active = EXCLUDED.active,
+          message = EXCLUDED.message,
+          updated_at = NOW()
+
+        RETURNING active, message
+        `,
+        [active, message]
+      );
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: 'Impossible de modifier le bandeau.',
+      });
+    }
+  }
+);
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`API Brainteaserday sur http://127.0.0.1:${PORT}`);
