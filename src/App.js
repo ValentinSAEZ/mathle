@@ -123,7 +123,7 @@ useEffect(() => {
   const [showAuth, setShowAuth] = useState(false);
 
   if (!session) return (
-    <div>
+    <div className="public-shell">
       <Banner />
       {showAuth ? (
         <div>
@@ -155,19 +155,18 @@ useEffect(() => {
   ];
 
   return (
-    <div style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)' }}>
+    <div className="app-shell" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)' }}>
       <Banner />
 
       {/* Top navigation bar */}
       <header className="topbar">
         <div className="nav-container">
           <div className="brand" onClick={() => setView('home')} title="Accueil">
-            <img className="brand-logo"
-              src={`${process.env.PUBLIC_URL || ''}/brand/logo.png`}
-              alt="BrainteaserDay"
-              onError={(e) => { e.currentTarget.src = `${process.env.PUBLIC_URL || ''}/logo192.png`; }}
-            />
-            <div className="brand-title">BrainteaserDay</div>
+            <span className="brand-mark" aria-hidden="true">∑</span>
+            <div>
+              <div className="brand-title">BrainteaserDay</div>
+              <div className="brand-kicker">Le défi qui réveille</div>
+            </div>
           </div>
 
           {/* Desktop nav */}
@@ -268,3 +267,4 @@ useEffect(() => {
     </div>
   );
 }
+
