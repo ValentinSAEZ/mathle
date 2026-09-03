@@ -1538,6 +1538,63 @@ app.get('/api/race-settings', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────
+// ARCHIVES
+// ─────────────────────────────────────────────
+
+app.get('/api/archive', async (req, res) => {
+  const limitRaw = Number(req.query.limit ?? 30);
+  const offsetRaw = Number(req.query.offset ?? 0);
+
+  const limit = Number.isInteger(limitRaw)
+    ? Math.max(0, Math.min(limitRaw, 100))
+    : 30;
+
+  const offset = Number.isInteger(offsetRaw)
+    ? Math.max(0, offsetRaw)
+    : 0;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        to_char(dr.day_key, 'YYYY-MM-DD') AS day_key,
+        dr.type,
+        dr.question,
+        COALESCE(
+          dr.answer_text,
+          dr.answer_number::text
+        ) AS answer,
+        dr.explanation,
+        dr.source
+
+      FROM daily_riddles dr
+
+      WHERE dr.day_key <
+        (NOW() AT TIME ZONE 'UTC')::date
+
+      ORDER BY dr.day_key DESC
+
+      LIMIT $1
+      OFFSET $2
+      `,
+      [limit, offset]
+    );
+
+    res.json({
+      rows: result.rows,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de charger les archives.',
+    });
+  }
+});
+
+
+
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`API Brainteaserday sur http://127.0.0.1:${PORT}`);

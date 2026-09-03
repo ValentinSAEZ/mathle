@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+const API_URL = 'https://api.brainteaserday.com';
 
 function getUTCDateKey(d = new Date()) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
@@ -14,19 +14,41 @@ export default function ArchivePage() {
 
   const todayKey = useMemo(() => getUTCDateKey(), []);
 
-  const load = async () => {
-    setLoading(true); setError('');
-    try {
-      const { data, error } = await supabase.rpc('get_riddle_archive', { p_limit: limit, p_offset: offset });
-      if (error) throw error;
-      setRows(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-      setError(e?.message || 'Impossible de charger les archives');
-    } finally {
-      setLoading(false);
+
+const load = async () => {
+  setLoading(true);
+  setError('');
+
+  try {
+    const response = await fetch(
+      `${API_URL}/api/archive?limit=${limit}&offset=${offset}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error || 'Impossible de charger les archives'
+      );
     }
-  };
+
+    setRows(
+      Array.isArray(data.rows)
+        ? data.rows
+        : []
+    );
+  } catch (error) {
+    console.error(error);
+
+    setError(
+      error?.message ||
+      'Impossible de charger les archives'
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => { load(); }, [offset]); // eslint-disable-line react-hooks/exhaustive-deps
 
