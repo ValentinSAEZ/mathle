@@ -1593,7 +1593,312 @@ app.get('/api/archive', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────
+// FORUM
+// ─────────────────────────────────────────────
 
+app.get('/api/forum/posts', async (req, res) => {
+  const day = String(
+    req.query.day || new Date().toISOString().slice(0, 10)
+  );
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return res.status(400).json({ error: 'Date invalide.' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        fp.id,
+        to_char(fp.day_key, 'YYYY-MM-DD') AS day_key,
+        fp.user_id,
+        fp.content,
+        fp.created_at,
+        p.username,
+        p.avatar_color
+      FROM forum_posts fp
+      LEFT JOIN profiles p
+        ON p.id = fp.user_id
+      WHERE fp.day_key = $1::date
+      ORDER BY fp.created_at DESC
+      LIMIT 50
+      `,
+      [day]
+    );
+
+    res.json({ rows: result.rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: 'Impossible de charger le forum.',
+    });
+  }
+});
+
+
+app.post('/api/forum/posts', requireAuth, async (req, res) => {
+  const day = String(req.body.day_key || '').trim();
+  const content = String(req.body.content || '').trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return res.status(400).json({ error: 'Date invalide.' });
+  }
+
+  if (!content || content.length > 1000) {
+    return res.status(400).json({
+      error: 'Le message doit contenir entre 1 et 1000 caractères.',
+    });
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (day > today) {
+    return res.status(400).json({
+      error: 'Impossible de publier dans le futur.',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      WITH inserted AS (
+        INSERT INTO forum_posts (
+          day_key,
+          user_id,
+          content
+        )
+        VALUES ($1::date, $2, $3)
+        RETURNING *
+      )
+      SELECT
+        i.id,
+        to_char(i.day_key, 'YYYY-MM-DD') AS day_key,
+        i.user_id,
+        i.content,
+        i.created_at,
+        p.username,
+        p.avatar_color
+      FROM inserted i
+      LEFT JOIN profiles p
+        ON p.id = i.user_id
+      `,
+      [day, req.user.id, content]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: 'Impossible de publier le message.',
+    });
+  }
+});
+
+
+app.delete('/api/forum/posts/:id', requireAuth, async (req, res) => {
+  const postId = Number(req.params.id);
+
+  if (!Number.isInteger(postId) || postId <= 0) {
+    return res.status(400).json({
+      error: 'Message invalide.',
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const owned = await client.query(
+      `
+      SELECT id
+      FROM forum_posts
+      WHERE id = $1
+        AND user_id = $2
+      `,
+      [postId, req.user.id]
+    );
+
+    if (owned.rowCount === 0) {
+      await client.query('ROLLBACK');
+
+      return res.status(404).json({
+        error: 'Message introuvable.',
+      });
+    }
+
+    await client.query(
+      `DELETE FROM forum_replies WHERE post_id = $1`,
+      [postId]
+    );
+
+    await client.query(
+      `
+      DELETE FROM forum_posts
+      WHERE id = $1
+        AND user_id = $2
+      `,
+      [postId, req.user.id]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({ ok: true });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de supprimer le message.',
+    });
+  } finally {
+    client.release();
+  }
+});
+
+
+app.get('/api/forum/posts/:id/replies', async (req, res) => {
+  const postId = Number(req.params.id);
+
+  if (!Number.isInteger(postId) || postId <= 0) {
+    return res.status(400).json({
+      error: 'Message invalide.',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        fr.id,
+        fr.post_id,
+        fr.user_id,
+        fr.content,
+        fr.created_at,
+        p.username,
+        p.avatar_color
+      FROM forum_replies fr
+      LEFT JOIN profiles p
+        ON p.id = fr.user_id
+      WHERE fr.post_id = $1
+      ORDER BY fr.created_at ASC
+      LIMIT 50
+      `,
+      [postId]
+    );
+
+    res.json({ rows: result.rows });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de charger les réponses.',
+    });
+  }
+});
+
+
+app.post('/api/forum/posts/:id/replies', requireAuth, async (req, res) => {
+  const postId = Number(req.params.id);
+  const content = String(req.body.content || '').trim();
+
+  if (!Number.isInteger(postId) || postId <= 0) {
+    return res.status(400).json({
+      error: 'Message invalide.',
+    });
+  }
+
+  if (!content || content.length > 500) {
+    return res.status(400).json({
+      error: 'La réponse doit contenir entre 1 et 500 caractères.',
+    });
+  }
+
+  try {
+    const post = await pool.query(
+      `SELECT id FROM forum_posts WHERE id = $1`,
+      [postId]
+    );
+
+    if (post.rowCount === 0) {
+      return res.status(404).json({
+        error: 'Message introuvable.',
+      });
+    }
+
+    const result = await pool.query(
+      `
+      WITH inserted AS (
+        INSERT INTO forum_replies (
+          post_id,
+          user_id,
+          content
+        )
+        VALUES ($1, $2, $3)
+        RETURNING *
+      )
+      SELECT
+        i.id,
+        i.post_id,
+        i.user_id,
+        i.content,
+        i.created_at,
+        p.username,
+        p.avatar_color
+      FROM inserted i
+      LEFT JOIN profiles p
+        ON p.id = i.user_id
+      `,
+      [postId, req.user.id, content]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de publier la réponse.',
+    });
+  }
+});
+
+
+app.delete('/api/forum/replies/:id', requireAuth, async (req, res) => {
+  const replyId = Number(req.params.id);
+
+  if (!Number.isInteger(replyId) || replyId <= 0) {
+    return res.status(400).json({
+      error: 'Réponse invalide.',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      DELETE FROM forum_replies
+      WHERE id = $1
+        AND user_id = $2
+      RETURNING id
+      `,
+      [replyId, req.user.id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: 'Réponse introuvable.',
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de supprimer la réponse.',
+    });
+  }
+});
 
 
 app.listen(PORT, '127.0.0.1', () => {
