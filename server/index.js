@@ -86,6 +86,120 @@ async function requireAdmin(req, res, next) {
   }
 }
 
+const DAILY_THEMES = [
+  'arithmetique',
+  'finance',
+  'general',
+  'geometrie',
+  'logique',
+  'probabilites',
+];
+
+const DAILY_SELECTION_SQL = `
+  WITH themes(theme) AS (
+    VALUES
+      ('arithmetique'),
+      ('finance'),
+      ('general'),
+      ('geometrie'),
+      ('logique'),
+      ('probabilites')
+  ),
+
+  ranked AS (
+    SELECT
+      r.id,
+      r.theme,
+
+      row_number() OVER (
+        PARTITION BY r.theme
+        ORDER BY r.id
+      ) AS rn,
+
+      count(*) OVER (
+        PARTITION BY r.theme
+      ) AS cnt
+
+    FROM riddles r
+
+    WHERE r.active = true
+      AND r.theme IN (
+        'arithmetique',
+        'finance',
+        'general',
+        'geometrie',
+        'logique',
+        'probabilites'
+      )
+  ),
+
+  rotation AS (
+    SELECT
+      t.theme,
+      r.id AS riddle_id
+
+    FROM themes t
+
+    JOIN ranked r
+      ON r.theme = t.theme
+     AND r.rn = (
+       mod(
+         ($1::date - DATE '1970-01-01')::int,
+         r.cnt::int
+       ) + 1
+     )::bigint
+  ),
+
+  selected AS (
+    SELECT
+      t.theme,
+
+      COALESCE(
+        ro.riddle_id,
+        rs.riddle_id,
+        rot.riddle_id
+      ) AS riddle_id
+
+    FROM themes t
+
+    LEFT JOIN riddle_overrides ro
+      ON ro.day_key = $1::date
+     AND ro.theme = t.theme
+
+    LEFT JOIN riddle_schedule rs
+      ON rs.day_key = $1::date
+     AND rs.theme = t.theme
+
+    LEFT JOIN rotation rot
+      ON rot.theme = t.theme
+  )
+
+  SELECT
+    r.id AS riddle_id,
+    r.type,
+    r.question,
+    s.theme,
+    r.answer_text,
+    r.answer_number,
+    r.explanation
+
+  FROM selected s
+
+  JOIN riddles r
+    ON r.id = s.riddle_id
+
+  ORDER BY s.theme
+`;
+
+async function loadDailySelection(db, day) {
+  const result = await db.query(
+    DAILY_SELECTION_SQL,
+    [day]
+  );
+
+  return result.rows;
+}
+
 app.get('/api/health', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW() AS now');
@@ -492,7 +606,8 @@ app.post('/api/me/password', requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────
 
 app.get('/api/riddles/today', async (req, res) => {
-  const requestedDay = String(req.query.day || '').trim();
+  const requestedDay =
+    String(req.query.day || '').trim();
 
   const day =
     requestedDay ||
@@ -505,50 +620,25 @@ app.get('/api/riddles/today', async (req, res) => {
   }
 
   try {
-    const result = await pool.query(
-      `
-      WITH ranked AS (
-        SELECT
-          id AS riddle_id,
-          type,
-          question,
-          theme,
-          row_number() OVER (
-            PARTITION BY theme
-            ORDER BY id
-          ) AS rn,
-          count(*) OVER (
-            PARTITION BY theme
-          ) AS cnt
-        FROM riddles
-        WHERE active = true
-      )
-      SELECT
-        riddle_id,
-        type,
-        question,
-        theme
-      FROM ranked
-      WHERE rn = (
-        mod(
-          ($1::date - DATE '1970-01-01')::int,
-          cnt::int
-        ) + 1
-      )::bigint
-      ORDER BY theme
-      `,
-      [day]
-    );
+    const rows =
+      await loadDailySelection(pool, day);
 
     res.json({
       day_key: day,
-      riddles: result.rows,
+
+      riddles: rows.map((r) => ({
+        riddle_id: r.riddle_id,
+        type: r.type,
+        question: r.question,
+        theme: r.theme,
+      })),
     });
   } catch (error) {
     console.error(error);
 
     res.status(500).json({
-      error: 'Impossible de charger les énigmes du jour.',
+      error:
+        'Impossible de charger les énigmes du jour.',
     });
   }
 });
@@ -726,51 +816,22 @@ app.post('/api/riddles/:id/guess', requireAuth, async (req, res) => {
 
     // Vérifier que l'énigme est réellement celle sélectionnée
     // pour ce thème et ce jour.
-    const riddleResult = await client.query(
-      `
-      WITH ranked AS (
-        SELECT
-          id,
-          type,
-          answer_text,
-          answer_number,
-          theme,
-          row_number() OVER (
-            PARTITION BY theme
-            ORDER BY id
-          ) AS rn,
-          count(*) OVER (
-            PARTITION BY theme
-          ) AS cnt
-        FROM riddles
-        WHERE active = true
-      )
-      SELECT
-        id,
-        type,
-        answer_text,
-        answer_number,
-        theme
-      FROM ranked
-      WHERE id = $1
-        AND rn = (
-          mod(
-            ($2::date - DATE '1970-01-01')::int,
-            cnt::int
-          ) + 1
-        )::bigint
-      `,
-      [riddleId, day]
-    );
+const dailySelection =
+  await loadDailySelection(client, day);
 
-    if (riddleResult.rowCount === 0) {
-      await client.query('ROLLBACK');
+const riddle = dailySelection.find(
+  (row) =>
+    Number(row.riddle_id) === riddleId
+);
 
-      return res.status(404).json({
-        error: "Cette énigme n'est pas celle du jour.",
-      });
-    }
+if (!riddle) {
+  await client.query('ROLLBACK');
 
+  return res.status(404).json({
+    error:
+      "Cette énigme n'est pas celle du jour.",
+  });
+}
     // Déjà résolue ?
     const solvedResult = await client.query(
       `
@@ -812,7 +873,6 @@ app.post('/api/riddles/:id/guess', requireAuth, async (req, res) => {
       });
     }
 
-    const riddle = riddleResult.rows[0];
 
     let result;
 
@@ -2586,7 +2646,428 @@ app.put(
   }
 );
 
+// ─────────────────────────────────────────────
+// ADMIN - OVERRIDES PAR THÈME
+// ─────────────────────────────────────────────
 
+app.get(
+  '/api/admin/overrides',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const day = String(req.query.day || '');
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return res.status(400).json({
+        error: 'Date invalide.',
+      });
+    }
+
+    try {
+      const result = await pool.query(
+        `
+        SELECT
+          ro.theme,
+          ro.riddle_id,
+          r.question
+        FROM riddle_overrides ro
+        LEFT JOIN riddles r
+          ON r.id = ro.riddle_id
+        WHERE ro.day_key = $1::date
+        ORDER BY ro.theme
+        `,
+        [day]
+      );
+
+      res.json({
+        rows: result.rows,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error:
+          'Impossible de charger les overrides.',
+      });
+    }
+  }
+);
+
+
+app.put(
+  '/api/admin/overrides/:theme',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const theme =
+      String(req.params.theme || '');
+
+    const day =
+      String(req.body.day || '');
+
+    const riddleId =
+      Number(req.body.riddle_id);
+
+    if (!DAILY_THEMES.includes(theme)) {
+      return res.status(400).json({
+        error: 'Thème invalide.',
+      });
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return res.status(400).json({
+        error: 'Date invalide.',
+      });
+    }
+
+    if (
+      !Number.isInteger(riddleId) ||
+      riddleId <= 0
+    ) {
+      return res.status(400).json({
+        error: "ID d'énigme invalide.",
+      });
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const riddle = await client.query(
+        `
+        SELECT id
+        FROM riddles
+        WHERE id = $1
+          AND active = true
+          AND theme = $2
+        `,
+        [riddleId, theme]
+      );
+
+      if (riddle.rowCount === 0) {
+        await client.query('ROLLBACK');
+
+        return res.status(400).json({
+          error:
+            "Cette énigme n'existe pas ou n'appartient pas à ce thème.",
+        });
+      }
+
+      await client.query(
+        `
+        INSERT INTO riddle_overrides (
+          day_key,
+          theme,
+          riddle_id,
+          question,
+          type,
+          answer,
+          explanation
+        )
+
+        VALUES (
+          $1::date,
+          $2,
+          $3,
+          NULL,
+          NULL,
+          NULL,
+          NULL
+        )
+
+        ON CONFLICT (day_key, theme)
+        DO UPDATE SET
+          riddle_id = EXCLUDED.riddle_id,
+          question = NULL,
+          type = NULL,
+          answer = NULL,
+          explanation = NULL
+        `,
+        [day, theme, riddleId]
+      );
+
+      // On ne détruit que la progression du thème modifié.
+      await client.query(
+        `
+        DELETE FROM attempts a
+        USING riddles r
+
+        WHERE a.riddle_id = r.id
+          AND a.day_key = $1::date
+          AND r.theme = $2
+        `,
+        [day, theme]
+      );
+
+      await client.query('COMMIT');
+
+      res.json({
+        ok: true,
+        theme,
+        riddle_id: riddleId,
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error(error);
+
+      res.status(500).json({
+        error:
+          "Impossible d'enregistrer l'override.",
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+
+app.delete(
+  '/api/admin/overrides/:theme',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const theme =
+      String(req.params.theme || '');
+
+    const day =
+      String(req.query.day || '');
+
+    if (!DAILY_THEMES.includes(theme)) {
+      return res.status(400).json({
+        error: 'Thème invalide.',
+      });
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return res.status(400).json({
+        error: 'Date invalide.',
+      });
+    }
+
+    try {
+      await pool.query(
+        `
+        DELETE FROM riddle_overrides
+        WHERE day_key = $1::date
+          AND theme = $2
+        `,
+        [day, theme]
+      );
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error:
+          "Impossible de supprimer l'override.",
+      });
+    }
+  }
+);
+
+
+// ─────────────────────────────────────────────
+// ADMIN - CALENDRIER PAR THÈME
+// ─────────────────────────────────────────────
+
+app.get(
+  '/api/admin/schedule',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const day = String(req.query.day || '');
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return res.status(400).json({
+        error: 'Date invalide.',
+      });
+    }
+
+    try {
+      const result = await pool.query(
+        `
+        SELECT
+          rs.theme,
+          rs.riddle_id,
+          r.question
+
+        FROM riddle_schedule rs
+
+        LEFT JOIN riddles r
+          ON r.id = rs.riddle_id
+
+        WHERE rs.day_key = $1::date
+
+        ORDER BY rs.theme
+        `,
+        [day]
+      );
+
+      res.json({
+        rows: result.rows,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error:
+          'Impossible de charger le calendrier.',
+      });
+    }
+  }
+);
+
+
+app.put(
+  '/api/admin/schedule/:theme',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const theme =
+      String(req.params.theme || '');
+
+    const day =
+      String(req.body.day || '');
+
+    const riddleId =
+      Number(req.body.riddle_id);
+
+    if (!DAILY_THEMES.includes(theme)) {
+      return res.status(400).json({
+        error: 'Thème invalide.',
+      });
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return res.status(400).json({
+        error: 'Date invalide.',
+      });
+    }
+
+    if (
+      !Number.isInteger(riddleId) ||
+      riddleId <= 0
+    ) {
+      return res.status(400).json({
+        error: "ID d'énigme invalide.",
+      });
+    }
+
+    try {
+      const riddle = await pool.query(
+        `
+        SELECT id
+        FROM riddles
+        WHERE id = $1
+          AND active = true
+          AND theme = $2
+        `,
+        [riddleId, theme]
+      );
+
+      if (riddle.rowCount === 0) {
+        return res.status(400).json({
+          error:
+            "Cette énigme n'existe pas ou n'appartient pas à ce thème.",
+        });
+      }
+
+      await pool.query(
+        `
+        INSERT INTO riddle_schedule (
+          day_key,
+          theme,
+          riddle_id,
+          question,
+          type,
+          answer,
+          explanation
+        )
+
+        VALUES (
+          $1::date,
+          $2,
+          $3,
+          NULL,
+          NULL,
+          NULL,
+          NULL
+        )
+
+        ON CONFLICT (day_key, theme)
+        DO UPDATE SET
+          riddle_id = EXCLUDED.riddle_id,
+          question = NULL,
+          type = NULL,
+          answer = NULL,
+          explanation = NULL
+        `,
+        [day, theme, riddleId]
+      );
+
+      res.json({
+        ok: true,
+        theme,
+        riddle_id: riddleId,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error:
+          'Impossible de planifier cette énigme.',
+      });
+    }
+  }
+);
+
+
+app.delete(
+  '/api/admin/schedule/:theme',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const theme =
+      String(req.params.theme || '');
+
+    const day =
+      String(req.query.day || '');
+
+    if (!DAILY_THEMES.includes(theme)) {
+      return res.status(400).json({
+        error: 'Thème invalide.',
+      });
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return res.status(400).json({
+        error: 'Date invalide.',
+      });
+    }
+
+    try {
+      await pool.query(
+        `
+        DELETE FROM riddle_schedule
+        WHERE day_key = $1::date
+          AND theme = $2
+        `,
+        [day, theme]
+      );
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error:
+          'Impossible de supprimer la planification.',
+      });
+    }
+  }
+);
 
 
 app.listen(PORT, '127.0.0.1', () => {

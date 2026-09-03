@@ -1,7 +1,16 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { supabase } from '../lib/supabaseClient';
 import { RIDDLE_THEMES } from '../lib/celebrate';
 const API_URL = 'https://api.brainteaserday.com';
+
+const DAILY_ADMIN_THEMES = [
+  'arithmetique',
+  'finance',
+  'general',
+  'geometrie',
+  'logique',
+  'probabilites',
+];
+
 
 /* ─── helpers ─────────────────────────────────────────────────── */
 function getUTCDateKey() {
@@ -412,130 +421,318 @@ function DailyRiddlePreview({ dayKey }) {
 
 /* ─── Énigme du jour (override) ───────────────────────────────── */
 function RiddleOverrideTab({ dayKey }) {
-  const [rid, setRid] = useState('');
-  const [q, setQ] = useState('');
-  const [a, setA] = useState('');
-  const [t, setT] = useState('number');
-  const [exp, setExp] = useState('');
   const [theme, setTheme] = useState('general');
+  const [rid, setRid] = useState('');
+  const [overrides, setOverrides] = useState({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await supabase.from('riddle_overrides')
-          .select('riddle_id, question, answer, type, explanation')
-          .eq('day_key', dayKey).maybeSingle();
-        if (data) {
-          setRid(data.riddle_id ?? '');
-          setQ(data.question ?? '');
-          setA(data.answer ?? '');
-          setT(data.type ?? 'number');
-          setExp(data.explanation ?? '');
+  const loadOverrides = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+
+      const response = await fetch(
+        `${API_URL}/api/admin/overrides?day=${encodeURIComponent(dayKey)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
-      } catch {}
-    })();
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || 'Impossible de charger les overrides'
+        );
+      }
+
+      const map = {};
+
+      for (const row of data.rows || []) {
+        map[row.theme] = row;
+      }
+
+      setOverrides(map);
+    } catch (error) {
+      console.error('Override load error:', error);
+    }
   }, [dayKey]);
+
+  useEffect(() => {
+    loadOverrides();
+  }, [loadOverrides]);
+
+  useEffect(() => {
+    setRid(
+      overrides[theme]?.riddle_id
+        ? String(overrides[theme].riddle_id)
+        : ''
+    );
+  }, [theme, overrides]);
 
   const save = async (e) => {
     e?.preventDefault?.();
-    setSaving(true); setMsg('');
+
+    if (!rid) {
+      setMsg("ID d'énigme requis");
+      return;
+    }
+
+    setSaving(true);
+    setMsg('');
+
     try {
-      const { error } = await supabase.rpc('admin_set_riddle', {
-        p_day: dayKey,
-        p_riddle_id: rid !== '' ? Number(rid) : null,
-        p_question: q || null,
-        p_type: q ? t : null,
-        p_answer: q ? a : null,
-        p_explanation: exp || null,
-      });
-      if (error) throw error;
+      const token = localStorage.getItem('auth_token');
+
+      const response = await fetch(
+        `${API_URL}/api/admin/overrides/${theme}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            day: dayKey,
+            riddle_id: Number(rid),
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Impossible d'enregistrer l'override"
+        );
+      }
+
       setMsg('Override enregistré ✅');
-      window.dispatchEvent(new CustomEvent('mathle:override-updated', { detail: { dayKey } }));
-    } catch (e) {
-      setMsg(`Échec — ${e?.message || ''}`);
-    } finally { setSaving(false); }
+
+      await loadOverrides();
+
+      window.dispatchEvent(
+        new CustomEvent('mathle:override-updated', {
+          detail: { dayKey, theme },
+        })
+      );
+    } catch (error) {
+      setMsg(`Échec — ${error?.message || ''}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const clear = async () => {
-    setSaving(true); setMsg('');
+    setSaving(true);
+    setMsg('');
+
     try {
-      const { error } = await supabase.rpc('admin_clear_riddle', { p_day: dayKey });
-      if (error) throw error;
+      const token = localStorage.getItem('auth_token');
+
+      const response = await fetch(
+        `${API_URL}/api/admin/overrides/${theme}?day=${encodeURIComponent(dayKey)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Impossible de supprimer l'override"
+        );
+      }
+
+      setRid('');
       setMsg('Override supprimé ✅');
-      setRid(''); setQ(''); setA(''); setT('number'); setExp(''); setTheme('general');
-      window.dispatchEvent(new CustomEvent('mathle:override-updated', { detail: { dayKey } }));
-    } catch (e) {
-      setMsg(`Échec — ${e?.message || ''}`);
-    } finally { setSaving(false); }
+
+      await loadOverrides();
+
+      window.dispatchEvent(
+        new CustomEvent('mathle:override-updated', {
+          detail: { dayKey, theme },
+        })
+      );
+    } catch (error) {
+      setMsg(`Échec — ${error?.message || ''}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  return (
-    <form onSubmit={save} style={{ display: 'grid', gap: 16 }}>
-      <div className="card" style={{ padding: 16 }}>
-        <SectionTitle>Utiliser une énigme existante</SectionTitle>
-        <FieldLabel>ID d'énigme</FieldLabel>
-        <input className="input" type="number" value={rid} onChange={e => setRid(e.target.value)}
-          placeholder="ex: 5 — laisser vide pour question personnalisée" style={{ width: '100%' }} />
-      </div>
+  const selectedTheme =
+    RIDDLE_THEMES[theme] || RIDDLE_THEMES.general;
 
-      <div className="card" style={{ padding: 16 }}>
-        <SectionTitle>Ou créer une question personnalisée</SectionTitle>
-        <div style={{ display: 'grid', gap: 12 }}>
+  const existing = overrides[theme];
+
+  return (
+    <form
+      onSubmit={save}
+      style={{ display: 'grid', gap: 16 }}
+    >
+      <div className="card" style={{ padding: 20 }}>
+        <SectionTitle>
+          Override — {dayKey}
+        </SectionTitle>
+
+        <div style={{ display: 'grid', gap: 16 }}>
           <div>
-            <FieldLabel>Thème</FieldLabel>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {Object.entries(RIDDLE_THEMES).map(([key, th]) => (
-                <button key={key} type="button" onClick={() => setTheme(key)} style={{
-                  padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '2px solid',
-                  background: theme === key ? th.color + '22' : 'transparent',
-                  borderColor: theme === key ? th.color : 'var(--card-border)',
-                  color: theme === key ? th.color : 'var(--muted)',
-                }}>
-                  {th.icon} {th.label}
-                </button>
-              ))}
+            <FieldLabel>Thème à modifier</FieldLabel>
+
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+              }}
+            >
+              {DAILY_ADMIN_THEMES.map((key) => {
+                const th =
+                  RIDDLE_THEMES[key] ||
+                  RIDDLE_THEMES.general;
+
+                const hasOverride =
+                  Boolean(overrides[key]);
+
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setTheme(key)}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: '2px solid',
+                      background:
+                        theme === key
+                          ? th.color + '22'
+                          : 'transparent',
+                      borderColor:
+                        theme === key
+                          ? th.color
+                          : 'var(--card-border)',
+                      color:
+                        theme === key
+                          ? th.color
+                          : 'var(--muted)',
+                    }}
+                  >
+                    {th.icon} {th.label}
+                    {hasOverride ? ' •' : ''}
+                  </button>
+                );
+              })}
             </div>
           </div>
-          <div>
-            <FieldLabel>Question</FieldLabel>
-            <textarea className="input" value={q} onChange={e => setQ(e.target.value)}
-              rows={4} placeholder="Saisir la question..." style={{ width: '100%' }} />
+
+          <div
+            style={{
+              background: selectedTheme.color + '12',
+              border: `1px solid ${selectedTheme.color}33`,
+              borderRadius: 8,
+              padding: 12,
+              fontSize: 13,
+            }}
+          >
+            <strong>
+              {selectedTheme.icon} {selectedTheme.label}
+            </strong>
+
+            {existing ? (
+              <div
+                style={{
+                  marginTop: 6,
+                  color: 'var(--muted)',
+                }}
+              >
+                Override actuel : énigme #{existing.riddle_id}
+                {existing.question
+                  ? ` — ${existing.question}`
+                  : ''}
+              </div>
+            ) : (
+              <div
+                style={{
+                  marginTop: 6,
+                  color: 'var(--muted)',
+                }}
+              >
+                Aucun override : rotation normale utilisée.
+              </div>
+            )}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 12 }}>
-            <div>
-              <FieldLabel>Type</FieldLabel>
-              <select className="input" value={t} onChange={e => setT(e.target.value)} style={{ width: '100%' }}>
-                <option value="number">Nombre</option>
-                <option value="word">Mot</option>
-              </select>
-            </div>
-            <div>
-              <FieldLabel>Réponse</FieldLabel>
-              <input className="input" type="text" value={a} onChange={e => setA(e.target.value)}
-                placeholder="ex: 42" style={{ width: '100%' }} />
-            </div>
-          </div>
+
           <div>
-            <FieldLabel>Explication (optionnel)</FieldLabel>
-            <textarea className="input" value={exp} onChange={e => setExp(e.target.value)}
-              rows={3} placeholder="Explication affichée après résolution..." style={{ width: '100%' }} />
+            <FieldLabel>
+              ID de la nouvelle énigme
+            </FieldLabel>
+
+            <input
+              className="input"
+              type="number"
+              min="1"
+              value={rid}
+              onChange={(e) => setRid(e.target.value)}
+              placeholder="Ex : 125"
+              style={{ width: '100%' }}
+            />
+
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--muted)',
+                marginTop: 5,
+              }}
+            >
+              L'énigme doit appartenir au thème{' '}
+              {selectedTheme.label}.
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <button type="button" className="btn" onClick={clear} disabled={saving}>Supprimer l'override</button>
-        <button type="submit" className="btn btn-primary" disabled={saving} style={{ marginLeft: 'auto' }}>
-          {saving ? 'Enregistrement…' : 'Enregistrer'}
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+        }}
+      >
+        <button
+          type="button"
+          className="btn"
+          onClick={clear}
+          disabled={saving || !existing}
+        >
+          Supprimer l'override
+        </button>
+
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={saving || !rid}
+          style={{ marginLeft: 'auto' }}
+        >
+          {saving
+            ? 'Enregistrement…'
+            : 'Appliquer'}
         </button>
       </div>
+
       <StatusMsg msg={msg} />
     </form>
   );
 }
-
 /* ─── Bibliothèque d'énigmes ──────────────────────────────────── */
 function RiddlesTab() {
   const [riddles, setRiddles] = useState([]);
@@ -1240,112 +1437,337 @@ const save = async (e) => {
 /* ─── Calendrier ──────────────────────────────────────────────── */
 function ScheduleTab() {
   const [date, setDate] = useState('');
-  const [rid, setRid] = useState('');
-  const [q, setQ] = useState('');
-  const [t, setT] = useState('number');
-  const [a, setA] = useState('');
-  const [exp, setExp] = useState('');
   const [theme, setTheme] = useState('general');
+  const [rid, setRid] = useState('');
+  const [schedule, setSchedule] = useState({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
+  const loadSchedule = useCallback(async () => {
+    if (!date) {
+      setSchedule({});
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('auth_token');
+
+      const response = await fetch(
+        `${API_URL}/api/admin/schedule?day=${encodeURIComponent(date)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || 'Impossible de charger le calendrier'
+        );
+      }
+
+      const map = {};
+
+      for (const row of data.rows || []) {
+        map[row.theme] = row;
+      }
+
+      setSchedule(map);
+    } catch (error) {
+      console.error('Schedule load error:', error);
+    }
+  }, [date]);
+
+  useEffect(() => {
+    loadSchedule();
+  }, [loadSchedule]);
+
+  useEffect(() => {
+    setRid(
+      schedule[theme]?.riddle_id
+        ? String(schedule[theme].riddle_id)
+        : ''
+    );
+  }, [theme, schedule]);
+
   const save = async (e) => {
     e?.preventDefault?.();
-    if (!date) { setMsg('Date requise'); return; }
-    setSaving(true); setMsg('');
+
+    if (!date) {
+      setMsg('Date requise');
+      return;
+    }
+
+    if (!rid) {
+      setMsg("ID d'énigme requis");
+      return;
+    }
+
+    setSaving(true);
+    setMsg('');
+
     try {
-      const { error } = await supabase.rpc('admin_set_schedule', {
-        p_day: date,
-        p_riddle_id: rid ? Number(rid) : null,
-        p_question: q || null,
-        p_type: q ? t : null,
-        p_answer: q ? a : null,
-        p_explanation: exp || null,
-      });
-      if (error) throw error;
+      const token = localStorage.getItem('auth_token');
+
+      const response = await fetch(
+        `${API_URL}/api/admin/schedule/${theme}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            day: date,
+            riddle_id: Number(rid),
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || 'Impossible de planifier cette énigme'
+        );
+      }
+
       setMsg('Calendrier enregistré ✅');
-    } catch (e) {
-      setMsg(`Échec — ${e?.message || ''}`);
-    } finally { setSaving(false); }
+
+      await loadSchedule();
+    } catch (error) {
+      setMsg(`Échec — ${error?.message || ''}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const clear = async () => {
-    if (!date) { setMsg('Date requise'); return; }
-    setSaving(true); setMsg('');
+    if (!date) {
+      setMsg('Date requise');
+      return;
+    }
+
+    setSaving(true);
+    setMsg('');
+
     try {
-      const { error } = await supabase.rpc('admin_clear_schedule', { p_day: date });
-      if (error) throw error;
+      const token = localStorage.getItem('auth_token');
+
+      const response = await fetch(
+        `${API_URL}/api/admin/schedule/${theme}?day=${encodeURIComponent(date)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            'Impossible de supprimer la planification'
+        );
+      }
+
+      setRid('');
       setMsg('Planification supprimée ✅');
-      setRid(''); setQ(''); setA(''); setT('number'); setExp(''); setTheme('general');
-    } catch (e) {
-      setMsg(`Échec — ${e?.message || ''}`);
-    } finally { setSaving(false); }
+
+      await loadSchedule();
+    } catch (error) {
+      setMsg(`Échec — ${error?.message || ''}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
+  const selectedTheme =
+    RIDDLE_THEMES[theme] || RIDDLE_THEMES.general;
+
+  const existing = schedule[theme];
+
   return (
-    <form onSubmit={save} style={{ display: 'grid', gap: 16 }}>
+    <form
+      onSubmit={save}
+      style={{ display: 'grid', gap: 16 }}
+    >
       <div className="card" style={{ padding: 20 }}>
-        <SectionTitle>Planifier une énigme</SectionTitle>
-        <div style={{ display: 'grid', gap: 12 }}>
+        <SectionTitle>
+          Planifier les énigmes
+        </SectionTitle>
+
+        <div style={{ display: 'grid', gap: 16 }}>
           <div>
-            <FieldLabel>Date (UTC)</FieldLabel>
-            <input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} style={{ width: '100%' }} />
+            <FieldLabel>Date UTC</FieldLabel>
+
+            <input
+              className="input"
+              type="date"
+              value={date}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setMsg('');
+              }}
+              style={{ width: '100%' }}
+            />
           </div>
-          <div>
-            <FieldLabel>ID d'énigme (optionnel)</FieldLabel>
-            <input className="input" type="number" value={rid} onChange={e => setRid(e.target.value)}
-              placeholder="Laisser vide pour question personnalisée" style={{ width: '100%' }} />
-          </div>
+
           <div>
             <FieldLabel>Thème</FieldLabel>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {Object.entries(RIDDLE_THEMES).map(([key, th]) => (
-                <button key={key} type="button" onClick={() => setTheme(key)} style={{
-                  padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '2px solid',
-                  background: theme === key ? th.color + '22' : 'transparent',
-                  borderColor: theme === key ? th.color : 'var(--card-border)',
-                  color: theme === key ? th.color : 'var(--muted)',
-                }}>{th.icon} {th.label}</button>
-              ))}
+
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+              }}
+            >
+              {DAILY_ADMIN_THEMES.map((key) => {
+                const th =
+                  RIDDLE_THEMES[key] ||
+                  RIDDLE_THEMES.general;
+
+                const planned =
+                  Boolean(schedule[key]);
+
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setTheme(key)}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: '2px solid',
+                      background:
+                        theme === key
+                          ? th.color + '22'
+                          : 'transparent',
+                      borderColor:
+                        theme === key
+                          ? th.color
+                          : 'var(--card-border)',
+                      color:
+                        theme === key
+                          ? th.color
+                          : 'var(--muted)',
+                    }}
+                  >
+                    {th.icon} {th.label}
+                    {planned ? ' •' : ''}
+                  </button>
+                );
+              })}
             </div>
           </div>
+
+          {date && (
+            <div
+              style={{
+                background: selectedTheme.color + '12',
+                border: `1px solid ${selectedTheme.color}33`,
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 13,
+              }}
+            >
+              <strong>
+                {selectedTheme.icon}{' '}
+                {selectedTheme.label}
+              </strong>
+
+              {existing ? (
+                <div
+                  style={{
+                    marginTop: 6,
+                    color: 'var(--muted)',
+                  }}
+                >
+                  Planifiée : énigme #{existing.riddle_id}
+                  {existing.question
+                    ? ` — ${existing.question}`
+                    : ''}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    marginTop: 6,
+                    color: 'var(--muted)',
+                  }}
+                >
+                  Aucune planification : rotation normale.
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
-            <FieldLabel>Question personnalisée</FieldLabel>
-            <textarea className="input" value={q} onChange={e => setQ(e.target.value)}
-              rows={4} placeholder="Saisir une question..." style={{ width: '100%' }} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 12 }}>
-            <div>
-              <FieldLabel>Type</FieldLabel>
-              <select className="input" value={t} onChange={e => setT(e.target.value)} style={{ width: '100%' }}>
-                <option value="number">Nombre</option>
-                <option value="word">Mot</option>
-              </select>
-            </div>
-            <div>
-              <FieldLabel>Réponse</FieldLabel>
-              <input className="input" type="text" value={a} onChange={e => setA(e.target.value)}
-                placeholder="ex: 42" style={{ width: '100%' }} />
-            </div>
-          </div>
-          <div>
-            <FieldLabel>Explication (optionnel)</FieldLabel>
-            <textarea className="input" value={exp} onChange={e => setExp(e.target.value)}
-              rows={3} style={{ width: '100%' }} />
+            <FieldLabel>
+              ID de l'énigme
+            </FieldLabel>
+
+            <input
+              className="input"
+              type="number"
+              min="1"
+              value={rid}
+              onChange={(e) => setRid(e.target.value)}
+              placeholder="Ex : 42"
+              style={{ width: '100%' }}
+            />
           </div>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <button type="button" className="btn" onClick={clear} disabled={saving}>Supprimer</button>
-        <button type="submit" className="btn btn-primary" disabled={saving} style={{ marginLeft: 'auto' }}>
-          {saving ? 'Enregistrement…' : 'Planifier'}
+
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+        }}
+      >
+        <button
+          type="button"
+          className="btn"
+          onClick={clear}
+          disabled={
+            saving ||
+            !date ||
+            !existing
+          }
+        >
+          Supprimer
+        </button>
+
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={
+            saving ||
+            !date ||
+            !rid
+          }
+          style={{ marginLeft: 'auto' }}
+        >
+          {saving
+            ? 'Enregistrement…'
+            : 'Planifier'}
         </button>
       </div>
+
       <StatusMsg msg={msg} />
     </form>
   );
 }
-
 /* ─── Main AdminPanel ─────────────────────────────────────────── */
 export default function AdminPanel({ onClose }) {
   const dayKey = useMemo(() => getUTCDateKey(), []);
