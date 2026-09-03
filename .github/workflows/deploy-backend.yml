@@ -1,0 +1,121 @@
+name: Deploy BrainteaserDay Backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "server/**"
+      - "package.json"
+      - "package-lock.json"
+      - "schema.sql"
+      - ".github/workflows/deploy-backend.yml"
+
+  workflow_dispatch:
+
+concurrency:
+  group: brainteaserday-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check backend syntax
+        run: node --check server/index.js
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Refuse automatic database migrations
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            exit 0
+          fi
+
+          CHANGED="$(git diff --name-only "$BEFORE" "$AFTER")"
+
+          echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -qx "schema.sql"; then
+            echo "schema.sql changed."
+            echo "Database migrations require a manual backup and migration."
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy VPS
+    needs: validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy backend
+        shell: bash
+        run: |
+          ssh "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" <<'EOF'
+            set -e
+
+            cd /var/www/mathle
+
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "ERROR: VPS repository contains local changes."
+              git status --short
+              exit 1
+            fi
+
+            OLD_COMMIT="$(git rev-parse HEAD)"
+
+            git pull --ff-only origin main
+
+            NEW_COMMIT="$(git rev-parse HEAD)"
+
+            if git diff --name-only "$OLD_COMMIT" "$NEW_COMMIT" \
+              | grep -Eq '^(package\.json|package-lock\.json)$'; then
+              npm ci
+            fi
+
+            node --check server/index.js
+
+            sudo systemctl restart brainteaserday
+
+            sleep 3
+
+            curl --fail --silent \
+              https://api.brainteaserday.com/api/health
+
+            echo
+            echo "Deployment successful: $NEW_COMMIT"
+          EOF
