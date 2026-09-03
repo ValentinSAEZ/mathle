@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { supabase } from '../lib/supabaseClient';
 import { getLevelInfo, getXpProgress } from '../lib/celebrate';
 const API_URL = 'https://api.brainteaserday.com';
 
@@ -148,7 +147,7 @@ useEffect(() => {
   };
 }, [targetUserId, selfUser?.created_at]);
 
-// Load completions
+// Load profile activity: completions, race runs and achievements
 useEffect(() => {
   let mounted = true;
 
@@ -156,30 +155,60 @@ useEffect(() => {
     if (!targetUserId) return;
 
     try {
-      const { data } = await supabase
-        .from('attempts')
-        .select('day_key, result')
-        .eq('user_id', targetUserId)
-        .gte('day_key', dateKeyUTC(start))
-        .lte('day_key', dateKeyUTC(end));
+      const startKey = dateKeyUTC(start);
+      const endKey = dateKeyUTC(end);
+
+      const response = await fetch(
+        `${API_URL}/api/profiles/${targetUserId}/activity?start=${encodeURIComponent(startKey)}&end=${encodeURIComponent(endKey)}`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          "Impossible de charger l'activité du profil"
+        );
+      }
 
       if (!mounted) return;
 
-      const m = new Map();
+      // Jours résolus
+      const completionMap = new Map();
 
-      for (const row of data || []) {
-        const key = String(row.day_key);
-
-        if (row.result === 'correct') {
-          m.set(key, true);
-        } else if (!m.has(key)) {
-          m.set(key, false);
-        }
+      for (const row of data.completions || []) {
+        completionMap.set(
+          String(row.day_key),
+          Boolean(row.solved)
+        );
       }
 
-      setSolvedMap(m);
+      setSolvedMap(completionMap);
+
+      // Dernières courses
+      setRaceRuns(
+        Array.isArray(data.race_runs)
+          ? data.race_runs
+          : []
+      );
+
+      // Succès
+      setAchievements(
+        Array.isArray(data.achievements)
+          ? data.achievements
+          : []
+      );
     } catch (error) {
-      console.error('Unable to load completions:', error);
+      console.error(
+        'Unable to load profile activity:',
+        error
+      );
+
+      if (mounted) {
+        setSolvedMap(new Map());
+        setRaceRuns([]);
+        setAchievements([]);
+      }
     }
   })();
 
@@ -188,58 +217,6 @@ useEffect(() => {
   };
 }, [targetUserId, start, end]);
 
-
-// Load race runs
-useEffect(() => {
-  let mounted = true;
-
-  (async () => {
-    if (!targetUserId) return;
-
-    try {
-      const { data } = await supabase
-        .from('race_runs')
-        .select('created_at, duration, level, score, attempts')
-        .eq('user_id', targetUserId)
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      if (mounted) {
-        setRaceRuns(data || []);
-      }
-    } catch (error) {
-      console.error('Unable to load race runs:', error);
-    }
-  })();
-
-  return () => {
-    mounted = false;
-  };
-}, [targetUserId]);
-
-
-
-
-
-
-  // Load achievements
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!targetUserId) return;
-      try {
-        const { data, error } = await supabase.rpc('get_user_achievements', { p_user: targetUserId });
-        if (error) throw error;
-        if (mounted) setAchievements(Array.isArray(data) ? data : []);
-      } catch {
-        try {
-          const { data } = await supabase.from('user_achievements').select('key, day_key, earned_at').eq('user_id', targetUserId).order('earned_at', { ascending: false }).limit(20);
-          if (mounted) setAchievements(data || []);
-        } catch {}
-      }
-    })();
-    return () => { mounted = false; };
-  }, [targetUserId]);
 
   const startEditing = useCallback(() => {
     setEditUsername(username);

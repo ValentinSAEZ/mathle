@@ -1900,6 +1900,103 @@ app.delete('/api/forum/replies/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────
+// ACTIVITÉ PUBLIQUE D'UN PROFIL
+// ─────────────────────────────────────────────
+
+app.get('/api/profiles/:id/activity', async (req, res) => {
+  const userId = String(req.params.id || '').trim();
+  const start = String(req.query.start || '').trim();
+  const end = String(req.query.end || '').trim();
+
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRegex.test(userId)) {
+    return res.status(400).json({
+      error: 'Utilisateur invalide.',
+    });
+  }
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(start) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(end)
+  ) {
+    return res.status(400).json({
+      error: 'Période invalide.',
+    });
+  }
+
+  try {
+    const [
+      completionResult,
+      raceResult,
+      achievementResult,
+    ] = await Promise.all([
+      pool.query(
+        `
+        SELECT
+          to_char(day_key, 'YYYY-MM-DD') AS day_key,
+          bool_or(result = 'correct') AS solved
+        FROM attempts
+        WHERE user_id = $1
+          AND day_key >= $2::date
+          AND day_key <= $3::date
+        GROUP BY day_key
+        ORDER BY day_key ASC
+        `,
+        [userId, start, end]
+      ),
+
+      pool.query(
+        `
+        SELECT
+          created_at,
+          duration,
+          level,
+          score,
+          attempts
+        FROM race_runs
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 10
+        `,
+        [userId]
+      ),
+
+      pool.query(
+        `
+        SELECT
+          ua.key,
+          ua.day_key,
+          ua.earned_at,
+          ac.title
+        FROM user_achievements ua
+        LEFT JOIN achievements_catalog ac
+          ON ac.key = ua.key
+        WHERE ua.user_id = $1
+        ORDER BY ua.earned_at DESC
+        LIMIT 20
+        `,
+        [userId]
+      ),
+    ]);
+
+    res.json({
+      completions: completionResult.rows,
+      race_runs: raceResult.rows,
+      achievements: achievementResult.rows,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de charger l’activité du profil.',
+    });
+  }
+});
+
+
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`API Brainteaserday sur http://127.0.0.1:${PORT}`);
