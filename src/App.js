@@ -103,24 +103,45 @@ export default function App() {
   setIsAdmin(Boolean(session?.user?.is_admin));
 }, [session]);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const { data } = await supabase
-          .from('race_settings')
-          .select('suspended')
-          .eq('id', 1)
-          .maybeSingle();
-        setRaceSuspended(Boolean(data?.suspended));
-      } catch {
-        setRaceSuspended(false);
+useEffect(() => {
+  const load = async () => {
+    try {
+      const response = await fetch(
+        `${API_URL}/api/race-settings`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || 'Paramètres Course indisponibles'
+        );
       }
-    };
-    load();
-    const onRace = () => load();
-    window.addEventListener('mathle:race-updated', onRace);
-    return () => window.removeEventListener('mathle:race-updated', onRace);
-  }, []);
+
+      setRaceSuspended(Boolean(data.suspended));
+    } catch (error) {
+      console.error(error);
+      setRaceSuspended(false);
+    }
+  };
+
+  load();
+
+  const onRace = () => load();
+
+  window.addEventListener(
+    'mathle:race-updated',
+    onRace
+  );
+
+  return () => {
+    window.removeEventListener(
+      'mathle:race-updated',
+      onRace
+    );
+  };
+}, []);
+
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
 

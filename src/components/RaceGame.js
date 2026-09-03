@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { supabase } from '../lib/supabaseClient';
 import { burstConfetti, bigCelebration } from '../lib/celebrate';
+
+const API_URL = 'https://api.brainteaserday.com';
 
 function initialsOf(name) {
   try {
@@ -74,18 +75,43 @@ function RaceLeaderboard({ level, duration, currentUserId }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    setLoading(true);
-    (async () => {
-      try {
-        const { data } = await supabase.rpc('get_race_leaderboard', { p_level: level, p_duration: duration });
-        if (mounted) setRows(Array.isArray(data) ? data : []);
-      } catch {}
-      finally { if (mounted) setLoading(false); }
-    })();
-    return () => { mounted = false; };
-  }, [level, duration]);
+useEffect(() => {
+  let mounted = true;
+  setLoading(true);
+
+  (async () => {
+    try {
+      const response = await fetch(
+        `${API_URL}/api/leaderboard/race?level=${encodeURIComponent(level)}&duration=${duration}`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Classement indisponible');
+      }
+
+      if (mounted) {
+        setRows(Array.isArray(data.rows) ? data.rows : []);
+      }
+    } catch (error) {
+      console.error(error);
+
+      if (mounted) {
+        setRows([]);
+      }
+    } finally {
+      if (mounted) {
+        setLoading(false);
+      }
+    }
+  })();
+
+  return () => {
+    mounted = false;
+  };
+}, [level, duration]);
+
 
   if (loading) return <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: 12 }}>Chargement…</div>;
   if (rows.length === 0) return <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: 12 }}>Aucun score pour cette configuration</div>;
@@ -257,20 +283,36 @@ export default function RaceGame({ session }) {
   useEffect(() => { maxComboRef.current = maxCombo; }, [maxCombo]);
 
   // Load personal best
-  const loadPB = useCallback(async () => {
-    if (!session?.user?.id) return;
-    try {
-      const { data } = await supabase.from('race_runs')
-        .select('score')
-        .eq('user_id', session.user.id)
-        .eq('level', level)
-        .eq('duration', duration)
-        .order('score', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setPersonalBest(data?.score ?? null);
-    } catch {}
-  }, [session?.user?.id, level, duration]);
+const loadPB = useCallback(async () => {
+  if (!session?.user?.id) return;
+
+  const token = localStorage.getItem('auth_token');
+
+  if (!token) return;
+
+  try {
+    const response = await fetch(
+      `${API_URL}/api/me/race-best?level=${encodeURIComponent(level)}&duration=${duration}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Record indisponible');
+    }
+
+    setPersonalBest(data.best_score ?? null);
+  } catch (error) {
+    console.error(error);
+    setPersonalBest(null);
+  }
+}, [session?.user?.id, level, duration]);
+
 
   useEffect(() => { loadPB(); }, [loadPB]);
 
@@ -298,27 +340,57 @@ export default function RaceGame({ session }) {
     savedRef.current = false;
   };
 
-  const saveRun = useCallback(async (finalScore, finalAttempts) => {
-    if (savedRef.current) return;
-    savedRef.current = true;
-    setSaving(true);
-    try {
-      const { data, error } = await supabase.rpc('save_race_run', {
-        p_duration: duration,
-        p_level: level,
-        p_score: finalScore,
-        p_attempts: finalAttempts,
-      });
-      if (error) throw error;
-      if (Array.isArray(data) && data.length > 0) setNewAchievements(data);
-    } catch (e) {
-      console.error('save_race_run error:', e);
-    } finally {
-      setSaving(false);
-      setShowEnd(true);
-      await loadPB();
+const saveRun = useCallback(async (finalScore, finalAttempts) => {
+  if (savedRef.current) return;
+
+  savedRef.current = true;
+  setSaving(true);
+
+  try {
+    const token = localStorage.getItem('auth_token');
+
+    if (!token) {
+      throw new Error('Utilisateur non authentifié');
     }
-  }, [duration, level, loadPB]);
+
+    const response = await fetch(
+      `${API_URL}/api/race-runs`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          duration,
+          level,
+          score: finalScore,
+          attempts: finalAttempts,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error || 'Impossible de sauvegarder la course'
+      );
+    }
+
+    setNewAchievements(
+      Array.isArray(data.achievements)
+        ? data.achievements
+        : []
+    );
+  } catch (error) {
+    console.error('save race error:', error);
+  } finally {
+    setSaving(false);
+    setShowEnd(true);
+    await loadPB();
+  }
+}, [duration, level, loadPB]);
 
   // End of time
   useEffect(() => {

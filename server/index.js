@@ -1314,6 +1314,230 @@ app.get('/api/me/race-stats', requireAuth, async (req, res) => {
 });
 
 
+// ─────────────────────────────────────────────
+// MODE COURSE
+// ─────────────────────────────────────────────
+
+// Record personnel pour une configuration
+app.get('/api/me/race-best', requireAuth, async (req, res) => {
+  const level = String(req.query.level || 'med');
+  const duration = Number(req.query.duration || 60);
+
+  if (!['easy', 'med', 'hard'].includes(level)) {
+    return res.status(400).json({
+      error: 'Niveau invalide.',
+    });
+  }
+
+  if (![30, 60, 120].includes(duration)) {
+    return res.status(400).json({
+      error: 'Durée invalide.',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT MAX(score)::int AS best_score
+      FROM race_runs
+      WHERE user_id = $1
+        AND level = $2
+        AND duration = $3
+      `,
+      [req.user.id, level, duration]
+    );
+
+    res.json({
+      best_score: result.rows[0]?.best_score ?? null,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de charger le record.',
+    });
+  }
+});
+
+
+// Sauvegarder une course
+app.post('/api/race-runs', requireAuth, async (req, res) => {
+  const duration = Number(req.body.duration);
+  const level = String(req.body.level || '');
+  const score = Math.max(0, Number(req.body.score) || 0);
+  const attempts = Math.max(0, Number(req.body.attempts) || 0);
+
+  if (![30, 60, 120].includes(duration)) {
+    return res.status(400).json({
+      error: 'Durée invalide.',
+    });
+  }
+
+  if (!['easy', 'med', 'hard'].includes(level)) {
+    return res.status(400).json({
+      error: 'Niveau invalide.',
+    });
+  }
+
+  if (!Number.isInteger(score) || !Number.isInteger(attempts)) {
+    return res.status(400).json({
+      error: 'Score ou nombre de tentatives invalide.',
+    });
+  }
+
+  if (score > attempts) {
+    return res.status(400).json({
+      error: 'Score incohérent.',
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    await client.query(
+      `
+      INSERT INTO race_runs (
+        user_id,
+        duration,
+        level,
+        score,
+        attempts
+      )
+      VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        req.user.id,
+        duration,
+        level,
+        score,
+        attempts,
+      ]
+    );
+
+    const achievementChecks = [
+      {
+        key: 'race_first',
+        condition: true,
+      },
+      {
+        key: 'race_score_10',
+        condition: score >= 10,
+      },
+      {
+        key: 'race_score_25',
+        condition: score >= 25,
+      },
+      {
+        key: 'race_hard',
+        condition: level === 'hard',
+      },
+      {
+        key: 'race_perfect',
+        condition: score >= 5 && score === attempts,
+      },
+    ];
+
+    const newKeys = [];
+
+    for (const achievement of achievementChecks) {
+      if (!achievement.condition) continue;
+
+      const existing = await client.query(
+        `
+        SELECT 1
+        FROM user_achievements
+        WHERE user_id = $1
+          AND key = $2
+        LIMIT 1
+        `,
+        [req.user.id, achievement.key]
+      );
+
+      if (existing.rowCount > 0) continue;
+
+      await client.query(
+        `
+        INSERT INTO user_achievements (
+          user_id,
+          key,
+          day_key,
+          earned_at
+        )
+        VALUES (
+          $1,
+          $2,
+          (NOW() AT TIME ZONE 'UTC')::date,
+          NOW()
+        )
+        `,
+        [req.user.id, achievement.key]
+      );
+
+      newKeys.push(achievement.key);
+    }
+
+    let achievements = [];
+
+    if (newKeys.length > 0) {
+      const result = await client.query(
+        `
+        SELECT
+          key AS achievement_key,
+          title AS achievement_title
+        FROM achievements_catalog
+        WHERE key = ANY($1::text[])
+        `,
+        [newKeys]
+      );
+
+      achievements = result.rows;
+    }
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      ok: true,
+      achievements,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de sauvegarder la course.',
+    });
+  } finally {
+    client.release();
+  }
+});
+
+
+// Statut public du mode Course
+app.get('/api/race-settings', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT suspended
+      FROM race_settings
+      WHERE id = 1
+      `
+    );
+
+    res.json({
+      suspended: Boolean(result.rows[0]?.suspended),
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de charger les paramètres Course.',
+    });
+  }
+});
+
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`API Brainteaserday sur http://127.0.0.1:${PORT}`);
