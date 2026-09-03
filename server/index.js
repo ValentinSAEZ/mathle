@@ -457,6 +457,446 @@ app.post('/api/me/password', requireAuth, async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────
+// ÉNIGMES DU JOUR
+// ─────────────────────────────────────────────
+
+app.get('/api/riddles/today', async (req, res) => {
+  const requestedDay = String(req.query.day || '').trim();
+
+  const day =
+    requestedDay ||
+    new Date().toISOString().slice(0, 10);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return res.status(400).json({
+      error: 'Date invalide.',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      WITH ranked AS (
+        SELECT
+          id AS riddle_id,
+          type,
+          question,
+          theme,
+          row_number() OVER (
+            PARTITION BY theme
+            ORDER BY id
+          ) AS rn,
+          count(*) OVER (
+            PARTITION BY theme
+          ) AS cnt
+        FROM riddles
+        WHERE active = true
+      )
+      SELECT
+        riddle_id,
+        type,
+        question,
+        theme
+      FROM ranked
+      WHERE rn = (
+        mod(
+          ($1::date - DATE '1970-01-01')::int,
+          cnt::int
+        ) + 1
+      )::bigint
+      ORDER BY theme
+      `,
+      [day]
+    );
+
+    res.json({
+      day_key: day,
+      riddles: result.rows,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de charger les énigmes du jour.',
+    });
+  }
+});
+
+// ─────────────────────────────────────────────
+// ÉTAT DU JOUEUR
+// ─────────────────────────────────────────────
+
+app.get('/api/me/game-status', requireAuth, async (req, res) => {
+  try {
+    const profileResult = await pool.query(
+      `
+      SELECT username, xp
+      FROM profiles
+      WHERE id = $1
+      `,
+      [req.user.id]
+    );
+
+    const banResult = await pool.query(
+      `
+      SELECT banned
+      FROM bans
+      WHERE user_id = $1
+      `,
+      [req.user.id]
+    );
+
+    const attemptsResult = await pool.query(
+      `
+      SELECT DISTINCT day_key
+      FROM attempts
+      WHERE user_id = $1
+        AND result = 'correct'
+        AND day_key >= (CURRENT_DATE - INTERVAL '60 days')::date
+      ORDER BY day_key DESC
+      `,
+      [req.user.id]
+    );
+
+    const solvedDays = new Set(
+      attemptsResult.rows.map(row => String(row.day_key).slice(0, 10))
+    );
+
+    let streak = 0;
+    const today = new Date();
+
+    for (let i = 0; i < 60; i++) {
+      const d = new Date(Date.UTC(
+        today.getUTCFullYear(),
+        today.getUTCMonth(),
+        today.getUTCDate() - i
+      ));
+
+      const key = d.toISOString().slice(0, 10);
+
+      if (solvedDays.has(key)) {
+        streak += 1;
+      } else {
+        break;
+      }
+    }
+
+    res.json({
+      username: profileResult.rows[0]?.username || null,
+      xp: profileResult.rows[0]?.xp || 0,
+      banned: Boolean(banResult.rows[0]?.banned),
+      streak,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Impossible de charger les informations du joueur.',
+    });
+  }
+});
+
+
+// ─────────────────────────────────────────────
+// HISTORIQUE DES TENTATIVES DU JOUR
+// ─────────────────────────────────────────────
+
+app.get('/api/riddles/today/history', requireAuth, async (req, res) => {
+  const day = String(
+    req.query.day || new Date().toISOString().slice(0, 10)
+  );
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return res.status(400).json({
+      error: 'Date invalide.',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        riddle_id,
+        created_at,
+        guess,
+        result
+      FROM attempts
+      WHERE user_id = $1
+        AND day_key = $2::date
+      ORDER BY created_at DESC
+      `,
+      [req.user.id, day]
+    );
+
+    res.json({
+      attempts: result.rows,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: "Impossible de charger l'historique.",
+    });
+  }
+});
+
+
+// ─────────────────────────────────────────────
+// SOUMETTRE UNE RÉPONSE
+// ─────────────────────────────────────────────
+
+app.post('/api/riddles/:id/guess', requireAuth, async (req, res) => {
+  const riddleId = Number(req.params.id);
+  const day = String(
+    req.body.day || new Date().toISOString().slice(0, 10)
+  );
+  const guess = String(req.body.guess || '').trim();
+
+  if (!Number.isInteger(riddleId) || riddleId <= 0) {
+    return res.status(400).json({
+      error: 'Énigme invalide.',
+    });
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return res.status(400).json({
+      error: 'Date invalide.',
+    });
+  }
+
+  if (!guess) {
+    return res.status(400).json({
+      error: 'Réponse requise.',
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Bannissement
+    const banResult = await client.query(
+      `
+      SELECT banned
+      FROM bans
+      WHERE user_id = $1
+      `,
+      [req.user.id]
+    );
+
+    if (banResult.rows[0]?.banned) {
+      await client.query('ROLLBACK');
+
+      return res.status(403).json({
+        error: 'Ton compte est banni.',
+      });
+    }
+
+    // Vérifier que l'énigme est réellement celle sélectionnée
+    // pour ce thème et ce jour.
+    const riddleResult = await client.query(
+      `
+      WITH ranked AS (
+        SELECT
+          id,
+          type,
+          answer_text,
+          answer_number,
+          theme,
+          row_number() OVER (
+            PARTITION BY theme
+            ORDER BY id
+          ) AS rn,
+          count(*) OVER (
+            PARTITION BY theme
+          ) AS cnt
+        FROM riddles
+        WHERE active = true
+      )
+      SELECT
+        id,
+        type,
+        answer_text,
+        answer_number,
+        theme
+      FROM ranked
+      WHERE id = $1
+        AND rn = (
+          mod(
+            ($2::date - DATE '1970-01-01')::int,
+            cnt::int
+          ) + 1
+        )::bigint
+      `,
+      [riddleId, day]
+    );
+
+    if (riddleResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+
+      return res.status(404).json({
+        error: "Cette énigme n'est pas celle du jour.",
+      });
+    }
+
+    // Déjà résolue ?
+    const solvedResult = await client.query(
+      `
+      SELECT 1
+      FROM attempts
+      WHERE user_id = $1
+        AND day_key = $2::date
+        AND riddle_id = $3
+        AND result = 'correct'
+      LIMIT 1
+      `,
+      [req.user.id, day, riddleId]
+    );
+
+    if (solvedResult.rowCount > 0) {
+      await client.query('ROLLBACK');
+
+      return res.status(409).json({
+        error: 'already solved',
+      });
+    }
+
+    // Rate limiting identique à l'ancien système
+    const rateResult = await client.query(
+      `
+      SELECT COUNT(*)::int AS count
+      FROM attempts
+      WHERE user_id = $1
+        AND created_at > NOW() - INTERVAL '10 seconds'
+      `,
+      [req.user.id]
+    );
+
+    if (rateResult.rows[0].count > 5) {
+      await client.query('ROLLBACK');
+
+      return res.status(429).json({
+        error: 'rate limited',
+      });
+    }
+
+    const riddle = riddleResult.rows[0];
+
+    let result;
+
+    if (riddle.type === 'number') {
+      const numericGuess = Number(guess);
+
+      if (!Number.isFinite(numericGuess)) {
+        result = 'wrong';
+      } else {
+        const answer = Number(riddle.answer_number);
+
+        if (numericGuess === answer) {
+          result = 'correct';
+        } else if (numericGuess < answer) {
+          result = 'low';
+        } else {
+          result = 'high';
+        }
+      }
+    } else {
+      const normalize = (value) =>
+        String(value || '')
+          .replace(/\s+/g, '')
+          .toLowerCase();
+
+      result =
+        normalize(guess) === normalize(riddle.answer_text)
+          ? 'correct'
+          : 'wrong';
+    }
+
+    await client.query(
+      `
+      INSERT INTO attempts (
+        user_id,
+        day_key,
+        riddle_id,
+        guess,
+        result
+      )
+      VALUES ($1, $2::date, $3, $4, $5)
+      `,
+      [
+        req.user.id,
+        day,
+        riddleId,
+        guess.slice(0, 128),
+        result,
+      ]
+    );
+
+    let xpGained = 0;
+    let newXp = null;
+
+    if (result === 'correct') {
+      const attemptsCount = await client.query(
+        `
+        SELECT COUNT(*)::int AS count
+        FROM attempts
+        WHERE user_id = $1
+          AND day_key = $2::date
+          AND riddle_id = $3
+        `,
+        [req.user.id, day, riddleId]
+      );
+
+      const count = attemptsCount.rows[0].count;
+
+      xpGained = 10;
+
+      if (count === 1) {
+        xpGained += 15;
+      } else if (count <= 3) {
+        xpGained += 8;
+      } else if (count <= 5) {
+        xpGained += 3;
+      }
+
+      const xpResult = await client.query(
+        `
+        UPDATE profiles
+        SET xp = xp + $1
+        WHERE id = $2
+        RETURNING xp
+        `,
+        [xpGained, req.user.id]
+      );
+
+      newXp = xpResult.rows[0]?.xp ?? null;
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      result,
+      xp_gained: xpGained,
+      xp: newXp,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+
+    console.error(error);
+
+    res.status(500).json({
+      error: "Erreur lors de l'enregistrement.",
+    });
+  } finally {
+    client.release();
+  }
+});
+
+
+
+
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`API Brainteaserday sur http://127.0.0.1:${PORT}`);

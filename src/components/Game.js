@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { supabase } from "../lib/supabaseClient";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { bigCelebration, burstConfetti, pulseOnce, getLevelInfo, getXpProgress, RIDDLE_THEMES } from "../lib/celebrate";
+const API_URL = 'https://api.brainteaserday.com';
+
 
 function getUTCDateKey() {
   const now = new Date();
@@ -11,19 +12,6 @@ function msUntilNextUTCMidnight() {
   const now = new Date();
   const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
   return next - now;
-}
-
-function addDaysUTC(date, days) {
-  const d = new Date(date);
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days));
-}
-
-function startOfUTCDay(date = new Date()) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function dateKeyUTC(date) {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
 const prefersReducedMotion = () => {
@@ -51,9 +39,6 @@ export default function Game({ session }) {
   const submitBtnRef = useRef(null);
   const victoryRef = useRef(null);
   const dayKey = getUTCDateKey();
-  const days = 42;
-  const end = useMemo(() => startOfUTCDay(new Date()), []);
-  const start = useMemo(() => addDaysUTC(end, -(days - 1)), [end]);
 
   // Countdown
   useEffect(() => {
@@ -70,135 +55,169 @@ export default function Game({ session }) {
     };
   })();
 
-  // Charger les énigmes du jour
-  const loadRiddles = useCallback(async () => {
-    setRiddleLoading(true);
-    try {
-      const { data, error } = await supabase.rpc('get_daily_riddles_all', { p_day: dayKey });
-      if (error) throw error;
-      const list = Array.isArray(data) ? data : [];
-      setRiddles(list);
-      if (list.length > 0 && !activeTheme) {
-        setActiveTheme(list[0].theme);
-      }
-      // Initialiser les états si nécessaire
-      setRiddleStates(prev => {
-        const next = { ...prev };
-        for (const r of list) {
-          if (!next[r.riddle_id]) next[r.riddle_id] = initRiddleState();
-        }
-        return next;
-      });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setRiddleLoading(false);
+// Charger les énigmes du jour
+const loadRiddles = useCallback(async () => {
+  setRiddleLoading(true);
+
+  try {
+    const response = await fetch(
+      `${API_URL}/api/riddles/today?day=${encodeURIComponent(dayKey)}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Impossible de charger les énigmes');
     }
-  }, [dayKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Charger l'historique de toutes les énigmes du jour
-  const loadHistory = useCallback(async () => {
-    if (!session?.user?.id || riddles.length === 0) return;
-    try {
-      const riddleIds = riddles.map(r => r.riddle_id);
-      const { data, error } = await supabase
-        .from('attempts')
-        .select('riddle_id, created_at, guess, result')
-        .eq('user_id', session.user.id)
-        .eq('day_key', dayKey)
-        .in('riddle_id', riddleIds)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+    const list = Array.isArray(data.riddles) ? data.riddles : [];
 
-      // Regrouper par riddle_id
-      const byRiddle = {};
-      for (const a of data || []) {
-        if (!byRiddle[a.riddle_id]) byRiddle[a.riddle_id] = [];
-        byRiddle[a.riddle_id].push({ t: a.created_at, guess: String(a.guess), result: a.result });
-      }
+    setRiddles(list);
 
-      setRiddleStates(prev => {
-        const next = { ...prev };
-        for (const rid of riddleIds) {
-          const history = byRiddle[rid] || [];
-          next[rid] = {
-            ...(next[rid] || initRiddleState()),
-            history,
-            solved: history.some(x => x.result === 'correct'),
-          };
-        }
-        return next;
-      });
-    } catch (e) {
-      console.error(e);
+    if (list.length > 0 && !activeTheme) {
+      setActiveTheme(list[0].theme);
     }
-  }, [session?.user?.id, dayKey, riddles]);
 
-  useEffect(() => { loadRiddles(); }, [loadRiddles]);
-  useEffect(() => { loadHistory(); }, [loadHistory]);
+    setRiddleStates(prev => {
+      const next = { ...prev };
 
-  // XP utilisateur
-  useEffect(() => {
-    if (!session?.user?.id) return;
-    (async () => {
-      try {
-        const { data } = await supabase.from('profiles').select('xp').eq('id', session.user.id).maybeSingle();
-        setUserXp(data?.xp || 0);
-      } catch {}
-    })();
-  }, [session?.user?.id]);
-
-  // Stats personnelles
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setSelfLoading(true);
-        const uid = session?.user?.id;
-        const email = session?.user?.email || '';
-        if (!uid) { if (mounted) setSelfLoading(false); return; }
-
-        try {
-          const { data: prof } = await supabase.from('profiles').select('username').eq('id', uid).maybeSingle();
-          const name = (prof?.username && String(prof.username).trim()) || email.split('@')[0] || 'Utilisateur';
-          if (mounted) setGreetingName(name);
-        } catch {
-          if (mounted) setGreetingName(email.split('@')[0] || 'Utilisateur');
+      for (const r of list) {
+        if (!next[r.riddle_id]) {
+          next[r.riddle_id] = initRiddleState();
         }
-
-        try {
-          const { data: atts } = await supabase.from('attempts').select('day_key, result').eq('user_id', uid).gte('day_key', dateKeyUTC(start)).lte('day_key', dateKeyUTC(end));
-          const map = new Map();
-          for (const row of atts || []) {
-            const k = String(row.day_key);
-            if (row.result === 'correct') map.set(k, true);
-            else if (!map.has(k)) map.set(k, false);
-          }
-          const range = [];
-          for (let i = 0; i < days; i++) range.push(dateKeyUTC(addDaysUTC(start, i)));
-          let s = 0;
-          for (let i = range.length - 1; i >= 0; i--) { if (map.get(range[i]) === true) s++; else break; }
-          if (mounted) setStreak(s);
-        } catch {}
-      } finally {
-        if (mounted) setSelfLoading(false);
       }
-    })();
-    return () => { mounted = false; };
-  }, [session?.user?.id, session?.user?.email, days, start, end]);
 
-  // Ban check
-  const checkBan = useCallback(async () => {
-    if (!session?.user?.id) { setIsBanned(false); return false; }
-    try {
-      const { data } = await supabase.from('bans').select('banned').eq('user_id', session.user.id).maybeSingle();
-      const banned = Boolean(data?.banned);
-      setIsBanned(banned);
-      return banned;
-    } catch { setIsBanned(false); return false; }
-  }, [session?.user?.id]);
+      return next;
+    });
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setRiddleLoading(false);
+  }
+}, [dayKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { checkBan(); }, [checkBan]);
+
+// Charger l'historique du jour
+const loadHistory = useCallback(async () => {
+  if (!session?.user?.id || riddles.length === 0) return;
+
+  const token = localStorage.getItem('auth_token');
+
+  if (!token) return;
+
+  try {
+    const response = await fetch(
+      `${API_URL}/api/riddles/today/history?day=${encodeURIComponent(dayKey)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || "Impossible de charger l'historique");
+    }
+
+    const riddleIds = riddles.map(r => r.riddle_id);
+    const byRiddle = {};
+
+    for (const a of data.attempts || []) {
+      if (!byRiddle[a.riddle_id]) {
+        byRiddle[a.riddle_id] = [];
+      }
+
+      byRiddle[a.riddle_id].push({
+        t: a.created_at,
+        guess: String(a.guess),
+        result: a.result,
+      });
+    }
+
+    setRiddleStates(prev => {
+      const next = { ...prev };
+
+      for (const rid of riddleIds) {
+        const history = byRiddle[rid] || [];
+
+        next[rid] = {
+          ...(next[rid] || initRiddleState()),
+          history,
+          solved: history.some(x => x.result === 'correct'),
+        };
+      }
+
+      return next;
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}, [session?.user?.id, dayKey, riddles]);
+
+
+useEffect(() => {
+  loadRiddles();
+}, [loadRiddles]);
+
+useEffect(() => {
+  loadHistory();
+}, [loadHistory]);
+
+
+// Profil / XP / série / bannissement
+const loadGameStatus = useCallback(async () => {
+  const token = localStorage.getItem('auth_token');
+  const email = session?.user?.email || '';
+
+  if (!session?.user?.id || !token) {
+    setSelfLoading(false);
+    return;
+  }
+
+  setSelfLoading(true);
+
+  try {
+    const response = await fetch(
+      `${API_URL}/api/me/game-status`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error || 'Impossible de charger les informations utilisateur'
+      );
+    }
+
+    const name =
+      (data.username && String(data.username).trim()) ||
+      email.split('@')[0] ||
+      'Utilisateur';
+
+    setGreetingName(name);
+    setUserXp(Number(data.xp) || 0);
+    setStreak(Number(data.streak) || 0);
+    setIsBanned(Boolean(data.banned));
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setSelfLoading(false);
+  }
+}, [session?.user?.id, session?.user?.email]);
+
+
+useEffect(() => {
+  loadGameStatus();
+}, [loadGameStatus]);
+
+
 
   // Mettre à jour l'état d'une énigme
   const updateRiddleState = (riddleId, patch) => {
@@ -209,99 +228,210 @@ export default function Game({ session }) {
   };
 
   // Soumission d'une réponse
-  const handleSubmit = async (e, riddle) => {
-    e.preventDefault();
-    const rs = riddleStates[riddle.riddle_id] || initRiddleState();
-    if (!rs.guess || !session) return;
+const handleSubmit = async (e, riddle) => {
+  e.preventDefault();
 
-    if (isBanned) {
-      const bannedNow = await checkBan();
-      if (bannedNow) {
-        updateRiddleState(riddle.riddle_id, { feedback: "Ton compte est banni.", feedbackType: "error", guess: '' });
-        return;
+  const rs =
+    riddleStates[riddle.riddle_id] || initRiddleState();
+
+  if (!rs.guess || !session) return;
+
+  if (isBanned) {
+    updateRiddleState(riddle.riddle_id, {
+      feedback: "Ton compte est banni.",
+      feedbackType: "error",
+      guess: '',
+    });
+    return;
+  }
+
+  if (rs.solved) {
+    updateRiddleState(riddle.riddle_id, {
+      feedback: "Tu as déjà résolu cette énigme !",
+      feedbackType: "success",
+      guess: '',
+    });
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem('auth_token');
+
+    const response = await fetch(
+      `${API_URL}/api/riddles/${riddle.riddle_id}/guess`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          day: dayKey,
+          guess: String(rs.guess),
+        }),
       }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const error = new Error(
+        data?.error || "Erreur lors de l'enregistrement."
+      );
+
+      error.status = response.status;
+      throw error;
     }
 
-    if (rs.solved) {
-      updateRiddleState(riddle.riddle_id, { feedback: "Tu as déjà résolu cette énigme !", feedbackType: "success", guess: '' });
+    const result = data.result;
+
+    let msg = '';
+    let type = '';
+
+    if (result === 'correct') {
+      msg = 'Bravo, bonne réponse !';
+      type = 'success';
+    } else if (result === 'low') {
+      msg = 'Trop petit !';
+      type = 'error';
+    } else if (result === 'high') {
+      msg = 'Trop grand !';
+      type = 'error';
+    } else {
+      msg = "Ce n'est pas ça... réessaie !";
+      type = 'error';
+    }
+
+    const newEntry = {
+      t: new Date().toISOString(),
+      guess: String(rs.guess),
+      result,
+    };
+
+    const newHistory = [
+      newEntry,
+      ...(rs.history || []),
+    ];
+
+    if (result === 'correct') {
+      const xp = Number(data.xp_gained) || 0;
+
+      if (typeof data.xp === 'number') {
+        setUserXp(data.xp);
+      } else {
+        setUserXp(prev => prev + xp);
+      }
+
+      const attempts = newHistory.length;
+
+      let shareMsg = '';
+
+      try {
+        const bar = [...newHistory]
+          .reverse()
+          .map(h =>
+            h.result === 'correct'
+              ? '🟩'
+              : h.result === 'low'
+              ? '🔵'
+              : h.result === 'high'
+              ? '🔴'
+              : '⬜'
+          )
+          .join('');
+
+        const theme =
+          RIDDLE_THEMES[riddle.theme] ||
+          RIDDLE_THEMES.general;
+
+        shareMsg =
+          `BrainteaserDay ${dayKey} — ${theme.label} — ` +
+          `${attempts} essai${attempts > 1 ? 's' : ''}\n` +
+          `${bar}\nhttps://brainteaserday.com`;
+      } catch {}
+
+      updateRiddleState(riddle.riddle_id, {
+        history: newHistory,
+        solved: true,
+        feedback: msg,
+        feedbackType: type,
+        guess: '',
+        xpGained: xp,
+        showVictory: true,
+        awardsToday: [],
+        shareMsg,
+      });
+
+      loadGameStatus();
+
+      if (!prefersReducedMotion()) {
+        setTimeout(
+          () =>
+            bigCelebration({
+              originEl:
+                victoryRef.current ||
+                submitBtnRef.current,
+            }),
+          200
+        );
+      }
+
+      pulseOnce(submitBtnRef.current);
+    } else {
+      updateRiddleState(riddle.riddle_id, {
+        history: newHistory,
+        feedback: msg,
+        feedbackType: type,
+        guess: '',
+      });
+    }
+  } catch (error) {
+    console.error(error);
+
+    if (error.status === 403) {
+      setIsBanned(true);
+
+      updateRiddleState(riddle.riddle_id, {
+        feedback: "Ton compte est banni.",
+        feedbackType: "error",
+        guess: '',
+      });
+
       return;
     }
 
-    try {
-      const { data, error } = await supabase.rpc('submit_guess_riddle', {
-        p_day: dayKey,
-        p_riddle_id: riddle.riddle_id,
-        p_guess: String(rs.guess),
+    if (error.status === 429) {
+      updateRiddleState(riddle.riddle_id, {
+        feedback:
+          "Trop d'essais, réessaie dans quelques secondes.",
+        feedbackType: "error",
       });
-      if (error) throw error;
-      const result = typeof data === 'string' ? data : String(data || 'wrong');
 
-      let msg = '';
-      let type = '';
-      if (result === 'correct') { msg = 'Bravo, bonne réponse !'; type = 'success'; }
-      else if (result === 'low') { msg = 'Trop petit !'; type = 'error'; }
-      else if (result === 'high') { msg = 'Trop grand !'; type = 'error'; }
-      else { msg = "Ce n'est pas ça... réessaie !"; type = 'error'; }
-
-      const newEntry = { t: new Date().toISOString(), guess: String(rs.guess), result };
-      const newHistory = [newEntry, ...(rs.history || [])];
-
-      if (result === 'correct') {
-        const attempts = newHistory.length;
-        let xp = 10;
-        if (attempts === 1) xp += 15;
-        else if (attempts <= 3) xp += 8;
-        else if (attempts <= 5) xp += 3;
-        if (streak >= 7) xp += 5;
-        if (streak >= 30) xp += 10;
-
-        try {
-          const { data: newXp } = await supabase.rpc('award_xp', { p_user: session.user.id, p_amount: xp });
-          if (typeof newXp === 'number') setUserXp(newXp);
-          else setUserXp(prev => prev + xp);
-        } catch { setUserXp(prev => prev + xp); }
-
-        // Share message
-        let shareMsg = '';
-        try {
-          const bar = [...newHistory].reverse()
-            .map(h => h.result === 'correct' ? '🟩' : h.result === 'low' ? '🔵' : h.result === 'high' ? '🔴' : '⬜')
-            .join('');
-          const theme = RIDDLE_THEMES[riddle.theme] || RIDDLE_THEMES.general;
-          shareMsg = `BrainteaserDay ${dayKey} — ${theme.label} — ${attempts} essai${attempts > 1 ? 's' : ''}\n${bar}\nhttps://brainteaserday.vercel.app`;
-        } catch {}
-
-        // Succès
-        let awards = [];
-        try {
-          const { data: awd } = await supabase.rpc('get_awards_for_day', { p_day: dayKey });
-          if (Array.isArray(awd)) awards = awd;
-        } catch {}
-
-        updateRiddleState(riddle.riddle_id, {
-          history: newHistory, solved: true, feedback: msg, feedbackType: type,
-          guess: '', xpGained: xp, showVictory: true, awardsToday: awards, shareMsg,
-        });
-
-        if (!prefersReducedMotion()) {
-          setTimeout(() => bigCelebration({ originEl: victoryRef.current || submitBtnRef.current }), 200);
-        }
-        pulseOnce(submitBtnRef.current);
-      } else {
-        updateRiddleState(riddle.riddle_id, { history: newHistory, feedback: msg, feedbackType: type, guess: '' });
-      }
-    } catch (e) {
-      console.error(e);
-      const raw = (e?.message || '').toLowerCase();
-      let msg = "Erreur lors de l'enregistrement. Réessaie.";
-      if (raw.includes('rate') && raw.includes('limit')) msg = "Trop d'essais, réessaie dans quelques secondes.";
-      else if (raw.includes('already') && raw.includes('solv')) {
-        updateRiddleState(riddle.riddle_id, { solved: true, feedback: "Tu as déjà résolu cette énigme !", feedbackType: "success", guess: '' });
-        return;
-      }
-      updateRiddleState(riddle.riddle_id, { feedback: msg, feedbackType: "error" });
+      return;
     }
-  };
+
+    if (error.status === 409) {
+      updateRiddleState(riddle.riddle_id, {
+        solved: true,
+        feedback:
+          "Tu as déjà résolu cette énigme !",
+        feedbackType: "success",
+        guess: '',
+      });
+
+      return;
+    }
+
+    updateRiddleState(riddle.riddle_id, {
+      feedback:
+        error?.message ||
+        "Erreur lors de l'enregistrement. Réessaie.",
+      feedbackType: "error",
+    });
+  }
+};
+
+
 
   const levelInfo = getLevelInfo(userXp);
   const xpProgress = getXpProgress(userXp);
