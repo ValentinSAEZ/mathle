@@ -1,8 +1,15 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test('renders the BrainteaserDay landing page', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(
+    screen.getByRole('heading', {
+      name: /fais travailler ton cerveau, un jour à la fois/i,
+    })
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole('button', { name: /jouer gratuitement/i })
+  ).toBeInTheDocument();
 });
+

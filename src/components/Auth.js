@@ -63,31 +63,12 @@ export default function Auth({ onSignedIn }) {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-header">
-          <div className="auth-logo" aria-hidden="true">
-            <picture>
-              <source
-                srcSet={`${process.env.PUBLIC_URL || ''}/brand/logo.svg`}
-                type="image/svg+xml"
-              />
-              <img
-                className="auth-logo-img"
-                src={`${process.env.PUBLIC_URL || ''}/brand/logo.png`}
-                alt="BrainteaserDay"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.parentElement?.insertAdjacentText(
-                    'beforeend',
-                    '🧠'
-                  );
-                }}
-              />
-            </picture>
-          </div>
+          <div className="auth-logo" aria-hidden="true">∑</div>
 
           <h1 className="auth-title">BrainteaserDay</h1>
 
           <p className="auth-subtitle">
-            Connectez-vous pour jouer et grimper au classement
+            Ton entraînement cérébral quotidien commence ici.
           </p>
         </div>
 
@@ -217,3 +198,4 @@ export default function Auth({ onSignedIn }) {
     </div>
   );
 }
+
