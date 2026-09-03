@@ -176,12 +176,14 @@ const loadRace = useCallback(async () => {
   // Tabs à afficher
   const tabs = [
     { key: 'general', label: '🏆 Global' },
-    ...themes.map(t => {
+    ...Array.from(new Set(themes)).map(t => {
       const meta = RIDDLE_THEMES[t] || RIDDLE_THEMES.general;
       return { key: t, label: `${meta.icon} ${meta.label}` };
     }),
     { key: 'race', label: '🏁 Course' },
   ];
+
+  const activeTabLabel = tabs.find(tab => tab.key === activeTab)?.label || '🏆 Global';
 
   // Données à afficher
   let rows = [];
@@ -200,40 +202,37 @@ const loadRace = useCallback(async () => {
     : (RIDDLE_THEMES[activeTab] || RIDDLE_THEMES.general);
 
   return (
-    <aside className="leaderboard-aside card leaderboard" style={{ overflow: 'hidden' }}>
+    <aside className="leaderboard-aside card leaderboard">
       {/* Header */}
-      <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--card-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Classement</h3>
-        <span style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{dayKey}</span>
+      <div className="leaderboard-header">
+        <div className="leaderboard-heading">
+          <span className="leaderboard-heading-icon" aria-hidden>🏆</span>
+          <div>
+            <h3>Classement</h3>
+            <span>Les meilleurs du jour</span>
+          </div>
+        </div>
+        <time dateTime={dayKey}>{dayKey}</time>
       </div>
 
-      {/* Onglets — scroll horizontal sur mobile */}
-      <div style={{ overflowX: 'auto', borderBottom: '1px solid var(--card-border)', scrollbarWidth: 'none' }}>
-        <div style={{ display: 'flex', padding: '6px 8px', gap: 4, minWidth: 'max-content' }}>
-          {tabs.map(tab => {
-            const isActive = activeTab === tab.key;
-            const meta = tab.key !== 'general' && tab.key !== 'race'
-              ? (RIDDLE_THEMES[tab.key] || RIDDLE_THEMES.general)
-              : null;
-            const accentColor = meta ? meta.color : tab.key === 'race' ? '#f59e0b' : 'var(--primary)';
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                style={{
-                  padding: '5px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  border: 'none', borderRadius: 20,
-                  background: isActive ? accentColor + '1a' : 'transparent',
-                  color: isActive ? accentColor : 'var(--muted)',
-                  whiteSpace: 'nowrap', transition: 'all 150ms ease',
-                  outline: isActive ? `1.5px solid ${accentColor}44` : 'none',
-                }}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+      {/* Sélecteur : toutes les catégories restent accessibles, quelle que soit la largeur. */}
+      <div className="leaderboard-category-picker">
+        <label htmlFor="leaderboard-category">Voir le classement</label>
+        <div className="leaderboard-select-wrap">
+          <select
+            id="leaderboard-category"
+            className="leaderboard-select"
+            value={activeTab}
+            onChange={event => setActiveTab(event.target.value)}
+            aria-label="Choisir une catégorie de classement"
+          >
+            {tabs.map(tab => (
+              <option key={tab.key} value={tab.key}>{tab.label}</option>
+            ))}
+          </select>
+          <span aria-hidden>⌄</span>
         </div>
+        <p><span aria-hidden>●</span> {activeTabLabel}</p>
       </div>
 
       {/* Filtres course */}
@@ -360,3 +359,4 @@ const loadRace = useCallback(async () => {
     </aside>
   );
 }
+
