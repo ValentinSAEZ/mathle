@@ -652,20 +652,32 @@ const handleSubmit = async (e, riddle) => {
 
       {/* Stats personnelles */}
       {!selfLoading && (
-        <div className="stat-grid" style={{ marginTop: 16 }}>
-          <div className="stat-card">
-            <div className="stat-value">{streak}</div>
-            <div className="stat-label">Jour{streak > 1 ? 's' : ''} de série</div>
+        <div className="stat-grid game-progress-grid" style={{ marginTop: 16 }}>
+          <div className="stat-card progress-stat">
+            <span className="progress-stat-icon" aria-hidden>🔥</span>
+            <div className="progress-stat-copy">
+              <div className="stat-value">{streak}</div>
+              <div className="stat-label">Jour{streak > 1 ? 's' : ''} de série</div>
+            </div>
           </div>
-          <div className="stat-card">
-            <div className="stat-value">{totalSolved}/{riddles.length}</div>
-            <div className="stat-label">Aujourd'hui</div>
+          <div className="stat-card progress-stat">
+            <span className="progress-stat-icon" aria-hidden>✓</span>
+            <div className="progress-stat-copy">
+              <div className="stat-value">{totalSolved}/{riddles.length}</div>
+              <div className="stat-label">Résolues aujourd'hui</div>
+            </div>
           </div>
-          <div className="stat-card" style={{ position: 'relative' }}>
-            <div className="stat-value" style={{ color: levelInfo.color }}>Niv. {levelInfo.level}</div>
-            <div className="stat-label">{levelInfo.title}</div>
-            <div className="xp-bar-mini" style={{ marginTop: 6 }}>
-              <div className="xp-bar-mini-fill" style={{ width: `${xpProgress * 100}%`, background: levelInfo.color }} />
+          <div className="stat-card progress-stat progress-level">
+            <span className="progress-stat-icon" aria-hidden>↗</span>
+            <div className="progress-stat-copy">
+              <div className="stat-value" style={{ color: levelInfo.color }}>Niveau {levelInfo.level}</div>
+              <div className="stat-label">{levelInfo.title}</div>
+            </div>
+            <div className="progress-level-meter">
+              <div className="xp-bar-mini">
+                <div className="xp-bar-mini-fill" style={{ width: `${xpProgress * 100}%`, background: levelInfo.color }} />
+              </div>
+              <span>{userXp} XP</span>
             </div>
           </div>
         </div>
@@ -673,3 +685,4 @@ const handleSubmit = async (e, riddle) => {
     </div>
   );
 }
+
