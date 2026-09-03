@@ -2108,6 +2108,487 @@ app.put(
   }
 );
 
+// ─────────────────────────────────────────────
+// ADMIN - DASHBOARD
+// ─────────────────────────────────────────────
+
+app.get(
+  '/api/admin/dashboard',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const day = String(
+      req.query.day || new Date().toISOString().slice(0, 10)
+    );
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return res.status(400).json({
+        error: 'Date invalide.',
+      });
+    }
+
+    try {
+      const result = await pool.query(
+        `
+        SELECT
+          (SELECT COUNT(*)::int FROM profiles)
+            AS total_users,
+
+          (SELECT COUNT(*)::int FROM riddles)
+            AS total_riddles,
+
+          (
+            SELECT COUNT(*)::int
+            FROM attempts
+            WHERE day_key = $1::date
+              AND result = 'correct'
+          ) AS solves_today,
+
+          (
+            SELECT COUNT(*)::int
+            FROM bans
+            WHERE banned = true
+          ) AS total_bans
+        `,
+        [day]
+      );
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: 'Dashboard indisponible.',
+      });
+    }
+  }
+);
+
+
+// ─────────────────────────────────────────────
+// ADMIN - 6 ÉNIGMES DU JOUR AVEC RÉPONSES
+// ─────────────────────────────────────────────
+
+app.get(
+  '/api/admin/riddles/today',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const day = String(
+      req.query.day || new Date().toISOString().slice(0, 10)
+    );
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      return res.status(400).json({
+        error: 'Date invalide.',
+      });
+    }
+
+    try {
+      const result = await pool.query(
+        `
+        WITH ranked AS (
+          SELECT
+            id,
+            type,
+            question,
+            theme,
+            answer_text,
+            answer_number,
+            explanation,
+
+            row_number() OVER (
+              PARTITION BY theme
+              ORDER BY id
+            ) AS rn,
+
+            count(*) OVER (
+              PARTITION BY theme
+            ) AS cnt
+
+          FROM riddles
+          WHERE active = true
+        )
+
+        SELECT
+          id,
+          type,
+          question,
+          theme,
+
+          COALESCE(
+            answer_text,
+            answer_number::text
+          ) AS answer,
+
+          explanation
+
+        FROM ranked
+
+        WHERE rn = (
+          mod(
+            ($1::date - DATE '1970-01-01')::int,
+            cnt::int
+          ) + 1
+        )::bigint
+
+        ORDER BY theme
+        `,
+        [day]
+      );
+
+      res.json({
+        day_key: day,
+        riddles: result.rows,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: 'Impossible de charger les énigmes.',
+      });
+    }
+  }
+);
+
+
+// ─────────────────────────────────────────────
+// ADMIN - BIBLIOTHÈQUE
+// ─────────────────────────────────────────────
+
+app.get(
+  '/api/admin/riddles',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `
+        SELECT
+          id,
+          question,
+          type,
+          theme,
+          explanation,
+          active,
+
+          COALESCE(
+            answer_text,
+            answer_number::text
+          ) AS answer
+
+        FROM riddles
+
+        ORDER BY id DESC
+        LIMIT 100
+        `
+      );
+
+      res.json({
+        rows: result.rows,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: 'Bibliothèque indisponible.',
+      });
+    }
+  }
+);
+
+
+app.post(
+  '/api/admin/riddles',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const type = String(req.body.type || '').trim();
+    const question = String(req.body.question || '').trim();
+    const answer = String(req.body.answer || '').trim();
+    const explanation =
+      String(req.body.explanation || '').trim() || null;
+
+    const theme = String(
+      req.body.theme || 'general'
+    ).trim();
+
+    const allowedThemes = [
+      'general',
+      'logique',
+      'probabilites',
+      'geometrie',
+      'finance',
+      'arithmetique',
+      'culture',
+      'estimation',
+    ];
+
+    if (!['word', 'number'].includes(type)) {
+      return res.status(400).json({
+        error: 'Type invalide.',
+      });
+    }
+
+    if (!question) {
+      return res.status(400).json({
+        error: 'Question requise.',
+      });
+    }
+
+    if (!answer) {
+      return res.status(400).json({
+        error: 'Réponse requise.',
+      });
+    }
+
+    if (!allowedThemes.includes(theme)) {
+      return res.status(400).json({
+        error: 'Thème invalide.',
+      });
+    }
+
+    const normalizedAnswer =
+      type === 'number'
+        ? answer.replace(',', '.')
+        : answer;
+
+    if (
+      type === 'number' &&
+      !Number.isFinite(Number(normalizedAnswer))
+    ) {
+      return res.status(400).json({
+        error: 'Réponse numérique invalide.',
+      });
+    }
+
+    try {
+      const result = await pool.query(
+        `
+        INSERT INTO riddles (
+          type,
+          question,
+          answer_text,
+          answer_number,
+          explanation,
+          theme,
+          active
+        )
+
+        VALUES (
+          $1,
+          $2,
+
+          CASE
+            WHEN $1 = 'word'
+            THEN $3
+            ELSE NULL
+          END,
+
+          CASE
+            WHEN $1 = 'number'
+            THEN $3::numeric
+            ELSE NULL
+          END,
+
+          $4,
+          $5,
+          true
+        )
+
+        RETURNING id
+        `,
+        [
+          type,
+          question,
+          normalizedAnswer,
+          explanation,
+          theme,
+        ]
+      );
+
+      res.status(201).json({
+        id: result.rows[0].id,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: "Impossible de créer l'énigme.",
+      });
+    }
+  }
+);
+
+
+// ─────────────────────────────────────────────
+// ADMIN - UTILISATEURS / BANS
+// ─────────────────────────────────────────────
+
+app.get(
+  '/api/admin/users',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `
+        SELECT
+          p.id,
+          p.username,
+          p.created_at,
+          p.xp,
+          p.is_admin,
+          COALESCE(b.banned, false) AS banned
+
+        FROM profiles p
+
+        LEFT JOIN bans b
+          ON b.user_id = p.id
+
+        ORDER BY p.created_at DESC
+        LIMIT 100
+        `
+      );
+
+      res.json({
+        rows: result.rows,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: 'Utilisateurs indisponibles.',
+      });
+    }
+  }
+);
+
+
+app.put(
+  '/api/admin/users/:id/ban',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const userId = String(req.params.id || '').trim();
+    const banned = Boolean(req.body.banned);
+    const reason = String(req.body.reason || '');
+
+    try {
+      const user = await pool.query(
+        `
+        SELECT id, is_admin
+        FROM profiles
+        WHERE id = $1
+        `,
+        [userId]
+      );
+
+      if (user.rowCount === 0) {
+        return res.status(404).json({
+          error: 'Utilisateur introuvable.',
+        });
+      }
+
+      // Sécurité supplémentaire :
+      // un admin ne peut pas bannir un autre admin.
+      if (user.rows[0].is_admin && banned) {
+        return res.status(403).json({
+          error: 'Impossible de bannir un administrateur.',
+        });
+      }
+
+      await pool.query(
+        `
+        INSERT INTO bans (
+          user_id,
+          reason,
+          banned,
+          created_at
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          NOW()
+        )
+
+        ON CONFLICT (user_id)
+        DO UPDATE SET
+          reason = EXCLUDED.reason,
+          banned = EXCLUDED.banned,
+          created_at = NOW()
+        `,
+        [userId, reason, banned]
+      );
+
+      res.json({
+        ok: true,
+        banned,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: 'Impossible de modifier le bannissement.',
+      });
+    }
+  }
+);
+
+
+// ─────────────────────────────────────────────
+// ADMIN - COURSE
+// ─────────────────────────────────────────────
+
+app.put(
+  '/api/admin/race-settings',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const suspended =
+      Boolean(req.body.suspended);
+
+    try {
+      await pool.query(
+        `
+        INSERT INTO race_settings (
+          id,
+          suspended,
+          updated_at
+        )
+
+        VALUES (
+          1,
+          $1,
+          NOW()
+        )
+
+        ON CONFLICT (id)
+        DO UPDATE SET
+          suspended = EXCLUDED.suspended,
+          updated_at = NOW()
+        `,
+        [suspended]
+      );
+
+      res.json({
+        suspended,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: 'Impossible de modifier le mode Course.',
+      });
+    }
+  }
+);
+
+
+
+
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`API Brainteaserday sur http://127.0.0.1:${PORT}`);
 });

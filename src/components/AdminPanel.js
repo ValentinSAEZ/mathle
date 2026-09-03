@@ -46,96 +46,366 @@ const TABS = [
 ];
 
 /* ─── Dashboard tab ────────────────────────────────────────────── */
+/* ─── Dashboard tab ────────────────────────────────────────────── */
 function DashboardTab({ dayKey }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
+
     (async () => {
       try {
-        const [
-          { count: totalUsers },
-          { count: totalRiddles },
-          { count: solvesToday },
-          { count: totalBans },
-        ] = await Promise.all([
-          supabase.from('profiles').select('*', { count: 'exact', head: true }),
-          supabase.from('riddles').select('*', { count: 'exact', head: true }),
-          supabase.from('attempts').select('*', { count: 'exact', head: true }).eq('day_key', dayKey).eq('result', 'correct'),
-          supabase.from('bans').select('*', { count: 'exact', head: true }).eq('banned', true),
-        ]);
-        if (mounted) setStats({ totalUsers, totalRiddles, solvesToday, totalBans });
-      } catch {}
-      if (mounted) setLoading(false);
+        const token = localStorage.getItem('auth_token');
+
+        const response = await fetch(
+          `${API_URL}/api/admin/dashboard?day=${encodeURIComponent(dayKey)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error || 'Dashboard indisponible'
+          );
+        }
+
+        if (!mounted) return;
+
+        setStats({
+          totalUsers: data.total_users,
+          totalRiddles: data.total_riddles,
+          solvesToday: data.solves_today,
+          totalBans: data.total_bans,
+        });
+      } catch (error) {
+        console.error(
+          'Admin dashboard error:',
+          error
+        );
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     })();
-    return () => { mounted = false; };
+
+    return () => {
+      mounted = false;
+    };
   }, [dayKey]);
 
-  const cards = stats ? [
-    { icon: '👥', label: 'Utilisateurs inscrits', value: stats.totalUsers ?? '—', color: '#6366f1' },
-    { icon: '📚', label: 'Énigmes en banque', value: stats.totalRiddles ?? '—', color: '#10b981' },
-    { icon: '✅', label: `Résolues aujourd'hui`, value: stats.solvesToday ?? '—', color: '#f59e0b' },
-    { icon: '🚫', label: 'Comptes bannis', value: stats.totalBans ?? '—', color: '#ef4444' },
-  ] : [];
+  const cards = stats
+    ? [
+        {
+          icon: '👥',
+          label: 'Utilisateurs inscrits',
+          value: stats.totalUsers ?? '—',
+          color: '#6366f1',
+        },
+        {
+          icon: '📚',
+          label: 'Énigmes en banque',
+          value: stats.totalRiddles ?? '—',
+          color: '#10b981',
+        },
+        {
+          icon: '✅',
+          label: `Résolues aujourd'hui`,
+          value: stats.solvesToday ?? '—',
+          color: '#f59e0b',
+        },
+        {
+          icon: '🚫',
+          label: 'Comptes bannis',
+          value: stats.totalBans ?? '—',
+          color: '#ef4444',
+        },
+      ]
+    : [];
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns:
+            'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: 12,
+        }}
+      >
         {loading ? (
-          <div style={{ color: 'var(--muted)', fontSize: 14, gridColumn: '1/-1' }}>Chargement des stats...</div>
-        ) : cards.map((c, i) => (
-          <div key={i} className="card" style={{ padding: '20px 16px', textAlign: 'center', borderTop: `3px solid ${c.color}` }}>
-            <div style={{ fontSize: 28, marginBottom: 6 }}>{c.icon}</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: c.color, lineHeight: 1 }}>{c.value}</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, lineHeight: 1.4 }}>{c.label}</div>
+          <div
+            style={{
+              color: 'var(--muted)',
+              fontSize: 14,
+              gridColumn: '1/-1',
+            }}
+          >
+            Chargement des stats...
           </div>
-        ))}
+        ) : (
+          cards.map((c, i) => (
+            <div
+              key={i}
+              className="card"
+              style={{
+                padding: '20px 16px',
+                textAlign: 'center',
+                borderTop: `3px solid ${c.color}`,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 28,
+                  marginBottom: 6,
+                }}
+              >
+                {c.icon}
+              </div>
+
+              <div
+                style={{
+                  fontSize: 28,
+                  fontWeight: 800,
+                  color: c.color,
+                  lineHeight: 1,
+                }}
+              >
+                {c.value}
+              </div>
+
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--muted)',
+                  marginTop: 4,
+                  lineHeight: 1.4,
+                }}
+              >
+                {c.label}
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
-      <div className="card" style={{ padding: 20 }}>
-        <SectionTitle>Énigme active — {dayKey}</SectionTitle>
-        <DailyRiddlePreview dayKey={dayKey} />
+      <div
+        className="card"
+        style={{ padding: 20 }}
+      >
+        <SectionTitle>
+          Énigmes actives — {dayKey}
+        </SectionTitle>
+
+        <DailyRiddlePreview
+          dayKey={dayKey}
+        />
       </div>
     </div>
   );
 }
 
+
 function DailyRiddlePreview({ dayKey }) {
-  const [riddle, setRiddle] = useState(null);
+  const [riddles, setRiddles] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     (async () => {
       try {
-        const { data } = await supabase.rpc('get_daily_riddle', { p_day: dayKey });
-        setRiddle(Array.isArray(data) ? data[0] : data);
-      } catch {}
-      setLoading(false);
+        const token =
+          localStorage.getItem('auth_token');
+
+        const response = await fetch(
+          `${API_URL}/api/admin/riddles/today?day=${encodeURIComponent(dayKey)}`,
+          {
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+              'Impossible de charger les énigmes'
+          );
+        }
+
+        if (mounted) {
+          setRiddles(
+            Array.isArray(data.riddles)
+              ? data.riddles
+              : []
+          );
+        }
+      } catch (error) {
+        console.error(
+          'Admin riddles preview error:',
+          error
+        );
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     })();
+
+    return () => {
+      mounted = false;
+    };
   }, [dayKey]);
 
-  if (loading) return <div style={{ color: 'var(--muted)', fontSize: 13 }}>Chargement...</div>;
-  if (!riddle) return <div style={{ color: 'var(--muted)', fontSize: 13 }}>Aucune énigme active pour aujourd'hui.</div>;
+  if (loading) {
+    return (
+      <div
+        style={{
+          color: 'var(--muted)',
+          fontSize: 13,
+        }}
+      >
+        Chargement...
+      </div>
+    );
+  }
 
-  const theme = RIDDLE_THEMES[riddle.theme] || RIDDLE_THEMES.general;
+  if (riddles.length === 0) {
+    return (
+      <div
+        style={{
+          color: 'var(--muted)',
+          fontSize: 13,
+        }}
+      >
+        Aucune énigme active.
+      </div>
+    );
+  }
+
   return (
-    <div style={{ display: 'grid', gap: 10 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span style={{ background: theme.color + '22', color: theme.color, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-          {theme.icon} {theme.label}
-        </span>
-        <span style={{ background: 'var(--surface-subtle)', padding: '3px 10px', borderRadius: 20, fontSize: 12, color: 'var(--muted)' }}>
-          {riddle.type}
-        </span>
-        {riddle.id && <span style={{ fontSize: 12, color: 'var(--muted)' }}>ID #{riddle.id}</span>}
-      </div>
-      <div style={{ fontSize: 14, lineHeight: 1.6, background: 'var(--surface-subtle)', borderRadius: 8, padding: '12px 14px', whiteSpace: 'pre-line' }}>
-        {riddle.question}
-      </div>
-      <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-        Réponse : <strong style={{ color: 'var(--text)' }}>{riddle.answer}</strong>
-      </div>
+    <div
+      style={{
+        display: 'grid',
+        gap: 12,
+      }}
+    >
+      {riddles.map((riddle) => {
+        const theme =
+          RIDDLE_THEMES[riddle.theme] ||
+          RIDDLE_THEMES.general;
+
+        return (
+          <div
+            key={riddle.id}
+            style={{
+              border:
+                '1px solid var(--card-border)',
+              borderRadius: 10,
+              padding: 14,
+              display: 'grid',
+              gap: 8,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span
+                style={{
+                  background:
+                    theme.color + '22',
+                  color: theme.color,
+                  padding: '3px 10px',
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                {theme.icon}{' '}
+                {theme.label}
+              </span>
+
+              <span
+                style={{
+                  background:
+                    'var(--surface-subtle)',
+                  padding: '3px 10px',
+                  borderRadius: 20,
+                  fontSize: 12,
+                  color: 'var(--muted)',
+                }}
+              >
+                {riddle.type}
+              </span>
+
+              <span
+                style={{
+                  fontSize: 12,
+                  color: 'var(--muted)',
+                }}
+              >
+                ID #{riddle.id}
+              </span>
+            </div>
+
+            <div
+              style={{
+                fontSize: 14,
+                lineHeight: 1.6,
+                background:
+                  'var(--surface-subtle)',
+                borderRadius: 8,
+                padding: '12px 14px',
+                whiteSpace: 'pre-line',
+              }}
+            >
+              {riddle.question}
+            </div>
+
+            <div
+              style={{
+                fontSize: 13,
+                color: 'var(--muted)',
+              }}
+            >
+              Réponse :{' '}
+              <strong
+                style={{
+                  color: 'var(--text)',
+                }}
+              >
+                {riddle.answer}
+              </strong>
+            </div>
+
+            {riddle.explanation && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--muted)',
+                }}
+              >
+                {riddle.explanation}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
