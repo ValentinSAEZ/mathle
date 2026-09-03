@@ -5,18 +5,18 @@
  */
 
 :root {
-  --bg: #fff9f2;
+  --bg: #fff8e7;
   --text: #273143;
   --muted: #687386;
-  --card-bg: #ffffff;
+  --card-bg: #fffef9;
   --card-border: #273143;
   --primary: #22c968;
   --primary-2: #16b459;
   --primary-soft: #dff8e8;
-  --input-bg: #ffffff;
-  --input-disabled-bg: #f2eee8;
-  --surface-subtle: #fff1e7;
-  --pill-bg: #effaf3;
+  --input-bg: #fffdf6;
+  --input-disabled-bg: #f3ecdd;
+  --surface-subtle: #fff0d8;
+  --pill-bg: #f5f9e9;
   --pill-border: #273143;
   --success: #12ae55;
   --danger: #ef6f6c;
@@ -598,6 +598,171 @@ a {
   border: 2px solid var(--ink);
   border-radius: 12px;
   box-shadow: 3px 3px 0 var(--ink);
+}
+
+/* Daily riddles */
+.game-shell {
+  min-width: 0;
+}
+
+.game-intro {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.game-greeting {
+  margin-bottom: 6px;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.countdown-label {
+  margin-right: 3px;
+}
+
+.countdown-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.game-daily-progress {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.riddle-theme-tabs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.riddle-theme-tab {
+  position: relative;
+  min-width: 0;
+  min-height: 62px;
+  padding: 9px 5px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  appearance: none;
+  color: var(--muted);
+  background: var(--card-bg);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform var(--transition), background var(--transition), color var(--transition), box-shadow var(--transition);
+}
+
+.riddle-theme-tab:hover {
+  transform: translateY(-2px);
+}
+
+.riddle-theme-tab.is-active {
+  color: var(--theme-color);
+  background: color-mix(in srgb, var(--theme-color) 12%, var(--card-bg));
+  border-color: var(--theme-color);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.riddle-theme-tab.is-solved:not(.is-active) {
+  color: var(--theme-color);
+  background: color-mix(in srgb, var(--theme-color) 6%, var(--card-bg));
+}
+
+.riddle-theme-tab:focus-visible {
+  outline: 3px solid var(--theme-color);
+  outline-offset: 3px;
+}
+
+.riddle-theme-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.riddle-theme-label {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.riddle-theme-check {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  color: var(--theme-color);
+  font-size: 10px;
+  font-weight: 1000;
+}
+
+.active-theme-heading {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.game-shell .answer-form {
+  min-width: 0;
+  flex-direction: row;
+}
+
+.game-shell .answer-form .input {
+  min-width: 0;
+}
+
+.game-history-card,
+.daily-stats-card {
+  overflow: hidden;
+}
+
+.game-history-header {
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.game-history-body {
+  padding: 16px;
+}
+
+.game-history-body.has-items {
+  padding: 8px;
+}
+
+.game-history-list {
+  display: grid;
+  gap: 6px;
+}
+
+.daily-stats-body {
+  padding: 18px;
+}
+
+.daily-stats-grid {
+  margin-bottom: 18px;
+}
+
+.daily-stats-distribution {
+  margin-bottom: 16px;
+}
+
+.daily-stats-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
 }
 
 .feedback-msg {
@@ -1368,6 +1533,10 @@ details.card > summary {
 }
 
 @media (max-width: 980px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .game-progress-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -1485,6 +1654,119 @@ details.card > summary {
   .home-grid,
   .page-container {
     padding: 24px 14px 108px;
+  }
+
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .game-intro {
+    margin-bottom: 16px;
+    padding: 15px 12px 14px;
+    background: var(--card-bg);
+    border: 2px solid var(--ink);
+    border-radius: 16px;
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+
+  .game-greeting {
+    margin-bottom: 10px;
+    font-size: 17px;
+  }
+
+  .countdown {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .countdown-label {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .035em;
+    text-transform: uppercase;
+  }
+
+  .countdown-digit {
+    min-width: 46px;
+    padding: 4px 6px;
+    font-size: 14px;
+  }
+
+  .game-daily-progress {
+    margin-top: 12px;
+    font-size: 12px;
+  }
+
+  .riddle-theme-tabs {
+    margin-right: -14px;
+    margin-left: -14px;
+    padding: 3px 14px 10px;
+    display: flex;
+    gap: 9px;
+    overflow-x: auto;
+    scroll-padding-inline: 14px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .riddle-theme-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .riddle-theme-tab {
+    min-width: 102px;
+    min-height: 58px;
+    flex: 0 0 102px;
+    scroll-snap-align: start;
+  }
+
+  .question-card {
+    padding: 21px 18px !important;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  .game-shell .answer-form {
+    gap: 8px;
+  }
+
+  .game-shell .answer-form .btn {
+    width: auto;
+    padding-inline: 17px !important;
+  }
+
+  .daily-stats-body {
+    padding: 14px;
+  }
+
+  .daily-stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .daily-stats-grid .stat-card {
+    min-height: 72px;
+    padding: 10px 5px;
+  }
+
+  .daily-stats-grid .stat-value {
+    font-size: 18px;
+  }
+
+  .daily-stats-grid .stat-label {
+    font-size: 9px;
+    line-height: 1.2;
+  }
+
+  .daily-stats-pills {
+    gap: 7px;
+  }
+
+  .daily-stats-pills .lb-pill {
+    padding: 5px 9px;
   }
 
   .game-progress-grid {
@@ -1639,6 +1921,12 @@ details.card > summary {
   .auth-card {
     padding: 27px 20px;
     box-shadow: 6px 6px 0 var(--ink);
+  }
+}
+
+@media (max-width: 360px) {
+  .daily-stats-race .lb-pill:last-child {
+    display: inline-flex;
   }
 }
 

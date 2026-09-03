@@ -441,22 +441,24 @@ const handleSubmit = async (e, riddle) => {
   const totalSolved = riddles.filter(r => (riddleStates[r.riddle_id] || initRiddleState()).solved).length;
 
   return (
-    <div>
+    <div className="game-shell">
       {/* Greeting & countdown */}
-      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+      <div className="game-intro">
         {!selfLoading && greetingName && (
-          <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>Bonjour, {greetingName}</div>
+          <div className="game-greeting">Bonjour, {greetingName}</div>
         )}
         <div className="countdown">
-          <span>Prochaines énigmes dans</span>
-          <span className="countdown-digit">{String(timeParts.h).padStart(2, '0')}</span>
-          <span>:</span>
-          <span className="countdown-digit">{String(timeParts.m).padStart(2, '0')}</span>
-          <span>:</span>
-          <span className="countdown-digit">{String(timeParts.s).padStart(2, '0')}</span>
+          <span className="countdown-label">Prochaines énigmes dans</span>
+          <span className="countdown-clock" aria-label={`${timeParts.h} heures, ${timeParts.m} minutes et ${timeParts.s} secondes`}>
+            <span className="countdown-digit">{String(timeParts.h).padStart(2, '0')}</span>
+            <span aria-hidden>:</span>
+            <span className="countdown-digit">{String(timeParts.m).padStart(2, '0')}</span>
+            <span aria-hidden>:</span>
+            <span className="countdown-digit">{String(timeParts.s).padStart(2, '0')}</span>
+          </span>
         </div>
         {riddles.length > 0 && (
-          <div style={{ marginTop: 8, fontSize: 13, color: 'var(--muted)' }}>
+          <div className="game-daily-progress">
             {totalSolved}/{riddles.length} énigme{riddles.length > 1 ? 's' : ''} résolue{totalSolved > 1 ? 's' : ''} aujourd'hui
           </div>
         )}
@@ -469,7 +471,7 @@ const handleSubmit = async (e, riddle) => {
         <div className="question-card" style={{ textAlign: 'center', color: 'var(--muted)' }}>Aucune énigme disponible pour le moment.</div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 8, marginBottom: 16 }}>
+          <div className="riddle-theme-tabs" role="tablist" aria-label="Catégories d'énigmes">
             {riddles.map(r => {
               const t = RIDDLE_THEMES[r.theme] || RIDDLE_THEMES.general;
               const rsSt = riddleStates[r.riddle_id] || initRiddleState();
@@ -478,25 +480,17 @@ const handleSubmit = async (e, riddle) => {
                 <button
                   key={r.riddle_id}
                   onClick={() => setActiveTheme(r.theme)}
+                  className={`riddle-theme-tab${isActive ? ' is-active' : ''}${rsSt.solved ? ' is-solved' : ''}`}
+                  role="tab"
+                  aria-selected={isActive}
                   style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                    padding: '10px 6px 8px', borderRadius: 12, fontSize: 11, fontWeight: 600,
-                    cursor: 'pointer', border: '2px solid', position: 'relative',
-                    borderColor: isActive ? t.color : rsSt.solved ? t.color + '55' : 'var(--card-border)',
-                    background: isActive ? t.color + '18' : rsSt.solved ? t.color + '0a' : 'var(--card-bg)',
-                    color: isActive ? t.color : rsSt.solved ? t.color + 'cc' : 'var(--muted)',
-                    transition: 'all 160ms ease',
-                    boxShadow: isActive ? `0 0 0 3px ${t.color}22` : 'none',
+                    '--theme-color': t.color,
                   }}
                 >
-                  <span style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</span>
-                  <span style={{ lineHeight: 1.2, textAlign: 'center', wordBreak: 'break-word', fontSize: 10 }}>{t.label}</span>
+                  <span className="riddle-theme-icon">{t.icon}</span>
+                  <span className="riddle-theme-label">{t.label}</span>
                   {rsSt.solved && (
-                    <span style={{
-                      position: 'absolute', top: 4, right: 5,
-                      fontSize: 9, fontWeight: 800,
-                      color: t.color,
-                    }}>✓</span>
+                    <span className="riddle-theme-check" aria-label="Résolue">✓</span>
                   )}
                 </button>
               );
@@ -504,9 +498,9 @@ const handleSubmit = async (e, riddle) => {
           </div>
 
           {activeRiddle && rs && theme && (
-            <div key={activeRiddle.riddle_id}>
+            <div key={activeRiddle.riddle_id} className="riddle-panel">
               {/* Theme badge */}
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <div className="active-theme-heading">
                 <span className="theme-badge" style={{ '--theme-color': theme.color }}>
                   <span>{theme.icon}</span> {theme.label}
                 </span>
@@ -620,16 +614,16 @@ const handleSubmit = async (e, riddle) => {
               )}
 
               {/* Historique */}
-              <div className="card" style={{ overflow: 'hidden' }}>
-                <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--card-border)' }}>
+              <div className="card game-history-card">
+                <div className="game-history-header">
                   <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Historique</h3>
                   <span style={{ fontSize: 12, color: 'var(--muted)' }}>{rs.history.length} tentative{rs.history.length !== 1 ? 's' : ''}</span>
                 </div>
-                <div style={{ padding: rs.history.length ? '8px' : '16px' }}>
+                <div className={`game-history-body${rs.history.length ? ' has-items' : ''}`}>
                   {rs.history.length === 0 ? (
                     <div style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center' }}>Aucune tentative pour l'instant</div>
                   ) : (
-                    <div style={{ display: 'grid', gap: 6 }}>
+                    <div className="game-history-list">
                       {rs.history.map((h, i) => (
                         <div key={`${h.t}-${i}`} className="history-item">
                           <span className="history-dot" style={{
