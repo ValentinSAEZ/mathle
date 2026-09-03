@@ -551,17 +551,43 @@ function RiddlesTab() {
   const [addSaving, setAddSaving] = useState(false);
   const [addMsg, setAddMsg] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data } = await supabase.from('riddles')
-        .select('id, question, answer, type, theme, explanation')
-        .order('id', { ascending: false })
-        .limit(100);
-      setRiddles(data || []);
-    } catch {}
+const load = useCallback(async () => {
+  setLoading(true);
+
+  try {
+    const token = localStorage.getItem('auth_token');
+
+    const response = await fetch(
+      `${API_URL}/api/admin/riddles`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error || 'Bibliothèque indisponible'
+      );
+    }
+
+    setRiddles(
+      Array.isArray(data.rows)
+        ? data.rows
+        : []
+    );
+  } catch (error) {
+    console.error(
+      'Admin riddles error:',
+      error
+    );
+  } finally {
     setLoading(false);
-  }, []);
+  }
+}, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -573,31 +599,75 @@ function RiddlesTab() {
     });
   }, [riddles, search, filterTheme]);
 
-  const addRiddle = async (e) => {
-    e?.preventDefault?.();
-    setAddSaving(true); setAddMsg('');
-    try {
-      if (!addQ.trim() || !addA.trim()) { setAddMsg('Question et réponse requises'); setAddSaving(false); return; }
-      const { data, error } = await supabase.rpc('admin_add_riddle', {
-        p_type: addType,
-        p_question: addQ,
-        p_answer: addType === 'number' ? addA.replace(',', '.') : addA,
-        p_explanation: addExp || null,
-      });
-      if (error) throw error;
-      // Set theme separately if column exists
-      const newId = Array.isArray(data) ? data[0] : data;
-      if (newId) {
-        await supabase.from('riddles').update({ theme: addTheme }).eq('id', newId);
+const addRiddle = async (e) => {
+  e?.preventDefault?.();
+
+  setAddSaving(true);
+  setAddMsg('');
+
+  try {
+    if (!addQ.trim() || !addA.trim()) {
+      setAddMsg(
+        'Question et réponse requises'
+      );
+      return;
+    }
+
+    const token =
+      localStorage.getItem('auth_token');
+
+    const response = await fetch(
+      `${API_URL}/api/admin/riddles`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type':
+            'application/json',
+          Authorization:
+            `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          type: addType,
+          question: addQ.trim(),
+          answer:
+            addType === 'number'
+              ? addA.replace(',', '.')
+              : addA.trim(),
+          explanation:
+            addExp.trim() || null,
+          theme: addTheme,
+        }),
       }
-      setAddMsg(`Énigme #${newId} créée ✅`);
-      setAddQ(''); setAddA(''); setAddExp(''); setAddTheme('general');
-      setShowForm(false);
-      load();
-    } catch (e) {
-      setAddMsg(`Échec — ${e?.message || ''}`);
-    } finally { setAddSaving(false); }
-  };
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error ||
+        "Impossible de créer l'énigme"
+      );
+    }
+
+    setAddMsg(
+      `Énigme #${data.id} créée ✅`
+    );
+
+    setAddQ('');
+    setAddA('');
+    setAddExp('');
+    setAddTheme('general');
+    setShowForm(false);
+
+    await load();
+  } catch (error) {
+    setAddMsg(
+      `Échec — ${error?.message || ''}`
+    );
+  } finally {
+    setAddSaving(false);
+  }
+};
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -715,48 +785,133 @@ function UsersTab() {
   const [actionMsg, setActionMsg] = useState({});
   const [actioning, setActioning] = useState({});
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, username, created_at, xp, is_admin')
-        .order('created_at', { ascending: false })
-        .limit(100);
-      const { data: banData } = await supabase
-        .from('bans')
-        .select('user_id')
-        .eq('banned', true);
-      setUsers(profiles || []);
-      setBans(new Set((banData || []).map(b => b.user_id)));
-    } catch {}
+const load = useCallback(async () => {
+  setLoading(true);
+
+  try {
+    const token =
+      localStorage.getItem('auth_token');
+
+    const response = await fetch(
+      `${API_URL}/api/admin/users`,
+      {
+        headers: {
+          Authorization:
+            `Bearer ${token}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error ||
+        'Utilisateurs indisponibles'
+      );
+    }
+
+    const rows =
+      Array.isArray(data.rows)
+        ? data.rows
+        : [];
+
+    setUsers(rows);
+
+    setBans(
+      new Set(
+        rows
+          .filter((u) => u.banned)
+          .map((u) => u.id)
+      )
+    );
+  } catch (error) {
+    console.error(
+      'Admin users error:',
+      error
+    );
+  } finally {
     setLoading(false);
-  }, []);
+  }
+}, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const toggleBan = async (userId, currentlyBanned) => {
-    setActioning(prev => ({ ...prev, [userId]: true }));
-    setActionMsg(prev => ({ ...prev, [userId]: '' }));
-    try {
-      const { error } = await supabase.rpc('admin_set_ban', {
-        p_user: userId,
-        p_reason: null,
-        p_banned: !currentlyBanned,
-      });
-      if (error) throw error;
-      setBans(prev => {
-        const next = new Set(prev);
-        if (currentlyBanned) next.delete(userId); else next.add(userId);
-        return next;
-      });
-      setActionMsg(prev => ({ ...prev, [userId]: currentlyBanned ? 'Débanni ✅' : 'Banni ✅' }));
-    } catch (e) {
-      setActionMsg(prev => ({ ...prev, [userId]: `Échec` }));
-    } finally {
-      setActioning(prev => ({ ...prev, [userId]: false }));
+const toggleBan = async (
+  userId,
+  currentlyBanned
+) => {
+  setActioning((prev) => ({
+    ...prev,
+    [userId]: true,
+  }));
+
+  setActionMsg((prev) => ({
+    ...prev,
+    [userId]: '',
+  }));
+
+  try {
+    const token =
+      localStorage.getItem('auth_token');
+
+    const response = await fetch(
+      `${API_URL}/api/admin/users/${userId}/ban`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type':
+            'application/json',
+          Authorization:
+            `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          banned: !currentlyBanned,
+          reason: '',
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error ||
+        'Impossible de modifier le bannissement'
+      );
     }
-  };
+
+    setBans((prev) => {
+      const next = new Set(prev);
+
+      if (currentlyBanned) {
+        next.delete(userId);
+      } else {
+        next.add(userId);
+      }
+
+      return next;
+    });
+
+    setActionMsg((prev) => ({
+      ...prev,
+      [userId]: currentlyBanned
+        ? 'Débanni ✅'
+        : 'Banni ✅',
+    }));
+  } catch (error) {
+    setActionMsg((prev) => ({
+      ...prev,
+      [userId]:
+        `Échec — ${error?.message || ''}`,
+    }));
+  } finally {
+    setActioning((prev) => ({
+      ...prev,
+      [userId]: false,
+    }));
+  }
+};
 
   const filtered = useMemo(() => {
     return users.filter(u => {
@@ -966,27 +1121,90 @@ function RaceTab() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await supabase.from('race_settings').select('suspended').eq('id', 1).maybeSingle();
-        if (data) setSuspended(Boolean(data.suspended));
-      } catch {}
-    })();
-  }, []);
-
-  const save = async (e) => {
-    e?.preventDefault?.();
-    setSaving(true); setMsg('');
+useEffect(() => {
+  (async () => {
     try {
-      const { error } = await supabase.rpc('admin_set_race', { p_suspended: suspended });
-      if (error) throw error;
-      setMsg('Paramètres enregistrés ✅');
-      window.dispatchEvent(new CustomEvent('mathle:race-updated'));
-    } catch (e) {
-      setMsg(`Échec — ${e?.message || ''}`);
-    } finally { setSaving(false); }
-  };
+      const response = await fetch(
+        `${API_URL}/api/race-settings`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          'Paramètres Course indisponibles'
+        );
+      }
+
+      setSuspended(
+        Boolean(data.suspended)
+      );
+    } catch (error) {
+      console.error(
+        'Race settings error:',
+        error
+      );
+    }
+  })();
+}, []);
+
+const save = async (e) => {
+  e?.preventDefault?.();
+
+  setSaving(true);
+  setMsg('');
+
+  try {
+    const token =
+      localStorage.getItem('auth_token');
+
+    const response = await fetch(
+      `${API_URL}/api/admin/race-settings`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type':
+            'application/json',
+          Authorization:
+            `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          suspended,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error ||
+        'Impossible de modifier le mode Course'
+      );
+    }
+
+    setSuspended(
+      Boolean(data.suspended)
+    );
+
+    setMsg(
+      'Paramètres enregistrés ✅'
+    );
+
+    window.dispatchEvent(
+      new CustomEvent(
+        'mathle:race-updated'
+      )
+    );
+  } catch (error) {
+    setMsg(
+      `Échec — ${error?.message || ''}`
+    );
+  } finally {
+    setSaving(false);
+  }
+};
 
   return (
     <form onSubmit={save} style={{ display: 'grid', gap: 16 }}>
