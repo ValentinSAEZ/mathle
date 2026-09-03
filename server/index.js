@@ -894,7 +894,424 @@ app.post('/api/riddles/:id/guess', requireAuth, async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────
+// CLASSEMENTS
+// ─────────────────────────────────────────────
 
+function validDay(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+
+// Classement général du jour
+app.get('/api/leaderboard/general', async (req, res) => {
+  const day = String(
+    req.query.day || new Date().toISOString().slice(0, 10)
+  );
+
+  if (!validDay(day)) {
+    return res.status(400).json({ error: 'Date invalide.' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      WITH ranked AS (
+        SELECT
+          id AS riddle_id,
+          theme,
+          row_number() OVER (
+            PARTITION BY theme
+            ORDER BY id
+          ) AS rn,
+          count(*) OVER (
+            PARTITION BY theme
+          ) AS cnt
+        FROM riddles
+        WHERE active = true
+      ),
+      daily_riddle_ids AS (
+        SELECT riddle_id
+        FROM ranked
+        WHERE rn = (
+          mod(
+            ($1::date - DATE '1970-01-01')::int,
+            cnt::int
+          ) + 1
+        )::bigint
+      ),
+      agg AS (
+        SELECT
+          a.user_id,
+          COUNT(
+            DISTINCT CASE
+              WHEN a.result = 'correct'
+              THEN a.riddle_id
+            END
+          )::int AS riddles_solved,
+          COUNT(*)::int AS total_attempts
+        FROM attempts a
+        WHERE a.day_key = $1::date
+          AND a.riddle_id IN (
+            SELECT riddle_id
+            FROM daily_riddle_ids
+          )
+        GROUP BY a.user_id
+      )
+      SELECT
+        agg.user_id,
+        COALESCE(p.username, '') AS username,
+        agg.riddles_solved,
+        agg.total_attempts
+      FROM agg
+      LEFT JOIN profiles p
+        ON p.id = agg.user_id
+      ORDER BY
+        agg.riddles_solved DESC,
+        agg.total_attempts ASC,
+        COALESCE(p.username, '') ASC
+      LIMIT 15
+      `,
+      [day]
+    );
+
+    res.json({ rows: result.rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: 'Classement indisponible.',
+    });
+  }
+});
+
+
+// Classement d'une catégorie
+app.get('/api/leaderboard/category', async (req, res) => {
+  const day = String(
+    req.query.day || new Date().toISOString().slice(0, 10)
+  );
+
+  const theme = String(req.query.theme || '').trim();
+
+  if (!validDay(day)) {
+    return res.status(400).json({ error: 'Date invalide.' });
+  }
+
+  if (!theme) {
+    return res.status(400).json({ error: 'Thème requis.' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      WITH ranked AS (
+        SELECT
+          id AS riddle_id,
+          theme,
+          row_number() OVER (
+            PARTITION BY theme
+            ORDER BY id
+          ) AS rn,
+          count(*) OVER (
+            PARTITION BY theme
+          ) AS cnt
+        FROM riddles
+        WHERE active = true
+      ),
+      daily_riddle AS (
+        SELECT riddle_id
+        FROM ranked
+        WHERE theme = $2
+          AND rn = (
+            mod(
+              ($1::date - DATE '1970-01-01')::int,
+              cnt::int
+            ) + 1
+          )::bigint
+        LIMIT 1
+      ),
+      agg AS (
+        SELECT
+          a.user_id,
+          COUNT(*)::int AS attempts,
+          bool_or(a.result = 'correct') AS solved,
+          MIN(a.created_at) AS first_attempt,
+          MIN(
+            CASE
+              WHEN a.result = 'correct'
+              THEN a.created_at
+            END
+          ) AS solved_at
+        FROM attempts a
+        WHERE a.day_key = $1::date
+          AND a.riddle_id = (
+            SELECT riddle_id
+            FROM daily_riddle
+          )
+        GROUP BY a.user_id
+      )
+      SELECT
+        agg.user_id,
+        COALESCE(p.username, '') AS username,
+        agg.attempts,
+
+        CASE
+          WHEN agg.solved
+            AND agg.solved_at IS NOT NULL
+            AND agg.first_attempt IS NOT NULL
+          THEN EXTRACT(
+            EPOCH FROM (
+              agg.solved_at - agg.first_attempt
+            )
+          )::int
+          ELSE NULL
+        END AS time_to_solve_seconds,
+
+        agg.solved
+
+      FROM agg
+
+      LEFT JOIN profiles p
+        ON p.id = agg.user_id
+
+      ORDER BY
+        agg.solved DESC,
+        agg.attempts ASC,
+        CASE
+          WHEN agg.solved
+            AND agg.solved_at IS NOT NULL
+          THEN EXTRACT(
+            EPOCH FROM (
+              agg.solved_at - agg.first_attempt
+            )
+          )::int
+          ELSE 999999
+        END ASC,
+        COALESCE(p.username, '') ASC
+
+      LIMIT 15
+      `,
+      [day, theme]
+    );
+
+    res.json({ rows: result.rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: 'Classement indisponible.',
+    });
+  }
+});
+
+
+// Classement Course
+app.get('/api/leaderboard/race', async (req, res) => {
+  const level = String(req.query.level || 'med');
+  const duration = Number(req.query.duration || 60);
+
+  if (!['easy', 'med', 'hard'].includes(level)) {
+    return res.status(400).json({
+      error: 'Niveau invalide.',
+    });
+  }
+
+  if (![30, 60, 120].includes(duration)) {
+    return res.status(400).json({
+      error: 'Durée invalide.',
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      WITH best_runs AS (
+        SELECT DISTINCT ON (rr.user_id)
+          rr.user_id,
+          rr.score,
+
+          CASE
+            WHEN rr.attempts > 0
+            THEN ROUND(
+              (rr.score::numeric / rr.attempts) * 100
+            )::int
+            ELSE 0
+          END AS accuracy,
+
+          (rr.created_at AT TIME ZONE 'UTC')::date AS run_date
+
+        FROM race_runs rr
+
+        WHERE rr.level = $1
+          AND rr.duration = $2
+
+        ORDER BY
+          rr.user_id,
+          rr.score DESC,
+          rr.created_at DESC
+      )
+
+      SELECT
+        br.user_id,
+        COALESCE(p.username, '') AS username,
+        br.score,
+        br.accuracy,
+        br.run_date
+
+      FROM best_runs br
+
+      LEFT JOIN profiles p
+        ON p.id = br.user_id
+
+      ORDER BY br.score DESC
+
+      LIMIT 15
+      `,
+      [level, duration]
+    );
+
+    res.json({ rows: result.rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: 'Classement course indisponible.',
+    });
+  }
+});
+
+
+// ─────────────────────────────────────────────
+// STATS DU JOUR
+// ─────────────────────────────────────────────
+
+app.get('/api/stats/today', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      WITH params AS (
+        SELECT
+          (NOW() AT TIME ZONE 'UTC')::date AS d
+      ),
+
+      players AS (
+        SELECT DISTINCT a.user_id
+        FROM attempts a, params
+        WHERE a.day_key = params.d
+      ),
+
+      solvers AS (
+        SELECT DISTINCT a.user_id
+        FROM attempts a, params
+        WHERE a.day_key = params.d
+          AND a.result = 'correct'
+      ),
+
+      attempts_to_success AS (
+        SELECT
+          s.user_id,
+
+          (
+            SELECT COUNT(*)::int
+            FROM attempts x, params
+            WHERE x.user_id = s.user_id
+              AND x.day_key = params.d
+              AND x.created_at <= (
+                SELECT MIN(y.created_at)
+                FROM attempts y, params
+                WHERE y.user_id = s.user_id
+                  AND y.day_key = params.d
+                  AND y.result = 'correct'
+              )
+          ) AS attempts
+
+        FROM solvers s
+      ),
+
+      distribution AS (
+        SELECT jsonb_build_object(
+          '1', COUNT(*) FILTER (WHERE attempts = 1),
+          '2', COUNT(*) FILTER (WHERE attempts = 2),
+          '3', COUNT(*) FILTER (WHERE attempts = 3),
+          '4', COUNT(*) FILTER (WHERE attempts = 4),
+          '5', COUNT(*) FILTER (WHERE attempts = 5),
+          '6', COUNT(*) FILTER (WHERE attempts = 6),
+          '>6', COUNT(*) FILTER (WHERE attempts > 6)
+        ) AS value
+
+        FROM attempts_to_success
+      )
+
+      SELECT
+        (SELECT COUNT(*)::int FROM players)
+          AS total_players,
+
+        (SELECT COUNT(*)::int FROM solvers)
+          AS solvers,
+
+        COALESCE(
+          (
+            SELECT AVG(attempts)
+            FROM attempts_to_success
+          ),
+          0
+        ) AS avg_attempts,
+
+        COALESCE(
+          (
+            SELECT value
+            FROM distribution
+          ),
+          '{}'::jsonb
+        ) AS distribution
+      `
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Stats indisponibles.',
+    });
+  }
+});
+
+
+// Stats personnelles du mode Course
+app.get('/api/me/race-stats', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        COALESCE(MAX(score), 0)::int
+          AS best_score,
+
+        COALESCE(
+          MAX(score) FILTER (
+            WHERE
+              (created_at AT TIME ZONE 'UTC')::date =
+              (NOW() AT TIME ZONE 'UTC')::date
+          ),
+          0
+        )::int AS best_today,
+
+        COUNT(*)::int AS runs_count
+
+      FROM race_runs
+
+      WHERE user_id = $1
+      `,
+      [req.user.id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Stats course indisponibles.',
+    });
+  }
+});
 
 
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { supabase } from '../lib/supabaseClient';
 import { RIDDLE_THEMES } from '../lib/celebrate';
+
+const API_URL = 'https://api.brainteaserday.com';
 
 function getUTCDateKey() {
   const now = new Date();
@@ -46,62 +47,103 @@ export default function Leaderboard({ onSelectUser }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Charger les thèmes du jour
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await supabase.rpc('get_daily_riddles_all', { p_day: dayKey });
-        const list = (Array.isArray(data) ? data : []).map(r => r.theme);
-        setThemes(list);
-      } catch {}
-    })();
-  }, [dayKey]);
+// Charger les thèmes du jour
+useEffect(() => {
+  (async () => {
+    try {
+      const response = await fetch(
+        `${API_URL}/api/riddles/today?day=${encodeURIComponent(dayKey)}`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Impossible de charger les thèmes');
+      }
+
+      const list = (data.riddles || []).map(r => r.theme);
+      setThemes(list);
+    } catch (error) {
+      console.error(error);
+    }
+  })();
+}, [dayKey]);
 
   // Charger classement général
-  const loadGeneral = useCallback(async () => {
-    setLoading(true); setError('');
-    try {
-      const { data, error } = await supabase.rpc('get_general_leaderboard', { p_day: dayKey });
-      if (error) throw error;
-      setGeneralRows(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-      setError('Classement indisponible.');
-    } finally {
-      setLoading(false);
-    }
-  }, [dayKey]);
+const loadGeneral = useCallback(async () => {
+  setLoading(true);
+  setError('');
 
+  try {
+    const response = await fetch(
+      `${API_URL}/api/leaderboard/general?day=${encodeURIComponent(dayKey)}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Classement indisponible');
+    }
+
+    setGeneralRows(Array.isArray(data.rows) ? data.rows : []);
+  } catch (error) {
+    console.error(error);
+    setError('Classement indisponible.');
+  } finally {
+    setLoading(false);
+  }
+}, [dayKey]);
   // Charger classement par catégorie
-  const loadCategory = useCallback(async (theme) => {
-    setLoading(true); setError('');
-    try {
-      const { data, error } = await supabase.rpc('get_category_leaderboard', { p_day: dayKey, p_theme: theme });
-      if (error) throw error;
-      setCategoryRows(prev => ({ ...prev, [theme]: Array.isArray(data) ? data : [] }));
-    } catch (e) {
-      console.error(e);
-      setError('Classement indisponible.');
-    } finally {
-      setLoading(false);
-    }
-  }, [dayKey]);
+const loadCategory = useCallback(async (theme) => {
+  setLoading(true);
+  setError('');
 
+  try {
+    const response = await fetch(
+      `${API_URL}/api/leaderboard/category?day=${encodeURIComponent(dayKey)}&theme=${encodeURIComponent(theme)}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Classement indisponible');
+    }
+
+    setCategoryRows(prev => ({
+      ...prev,
+      [theme]: Array.isArray(data.rows) ? data.rows : [],
+    }));
+  } catch (error) {
+    console.error(error);
+    setError('Classement indisponible.');
+  } finally {
+    setLoading(false);
+  }
+}, [dayKey]);
   // Charger classement course
-  const loadRace = useCallback(async () => {
-    setLoading(true); setError('');
-    try {
-      const { data, error } = await supabase.rpc('get_race_leaderboard', { p_level: raceLevel, p_duration: raceDuration });
-      if (error) throw error;
-      setRaceRows(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-      setError('Classement course indisponible.');
-    } finally {
-      setLoading(false);
-    }
-  }, [raceLevel, raceDuration]);
+const loadRace = useCallback(async () => {
+  setLoading(true);
+  setError('');
 
+  try {
+    const response = await fetch(
+      `${API_URL}/api/leaderboard/race?level=${encodeURIComponent(raceLevel)}&duration=${raceDuration}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Classement course indisponible');
+    }
+
+    setRaceRows(Array.isArray(data.rows) ? data.rows : []);
+  } catch (error) {
+    console.error(error);
+    setError('Classement course indisponible.');
+  } finally {
+    setLoading(false);
+  }
+}, [raceLevel, raceDuration]);
   // Charger selon l'onglet actif
   useEffect(() => {
     if (activeTab === 'general') loadGeneral();
