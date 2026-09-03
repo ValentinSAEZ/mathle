@@ -100,7 +100,7 @@ export default function StatsToday() {
   const dist = data?.distribution || {};
 
   return (
-    <div className="card" style={{ overflow: 'hidden' }}>
+    <div className="card daily-stats-card">
       <div
         style={{
           padding: '14px 18px',
@@ -118,7 +118,7 @@ export default function StatsToday() {
         </h3>
       </div>
 
-      <div style={{ padding: 18 }}>
+      <div className="daily-stats-body">
         {loading && !data ? (
           <div
             style={{
@@ -132,10 +132,7 @@ export default function StatsToday() {
           <>
             {data && (
               <>
-                <div
-                  className="stat-grid"
-                  style={{ marginBottom: 16 }}
-                >
+                <div className="stat-grid daily-stats-grid">
                   <div className="stat-card">
                     <div className="stat-value">
                       {data.total_players}
@@ -166,7 +163,7 @@ export default function StatsToday() {
                   </div>
                 </div>
 
-                <div style={{ marginBottom: 14 }}>
+                <div className="daily-stats-distribution">
                   <div
                     style={{
                       fontSize: 12,
@@ -180,13 +177,7 @@ export default function StatsToday() {
                     Distribution
                   </div>
 
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 6,
-                      flexWrap: 'wrap',
-                    }}
-                  >
+                  <div className="daily-stats-pills">
                     {Array.from({ length: 6 }).map(
                       (_, i) => {
                         const k = String(i + 1);
@@ -225,13 +216,7 @@ export default function StatsToday() {
                 Mode Course
               </div>
 
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 8,
-                  flexWrap: 'wrap',
-                }}
-              >
+              <div className="daily-stats-pills daily-stats-race">
                 <span className="lb-pill">
                   Meilleur:{' '}
                   {raceBestScore == null
@@ -260,3 +245,4 @@ export default function StatsToday() {
     </div>
   );
 }
+
