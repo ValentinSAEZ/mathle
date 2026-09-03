@@ -5,18 +5,18 @@
  */
 
 :root {
-  --bg: #fff9f2;
+  --bg: #fff8e7;
   --text: #273143;
   --muted: #687386;
-  --card-bg: #ffffff;
+  --card-bg: #fffef9;
   --card-border: #273143;
   --primary: #22c968;
   --primary-2: #16b459;
   --primary-soft: #dff8e8;
-  --input-bg: #ffffff;
-  --input-disabled-bg: #f2eee8;
-  --surface-subtle: #fff1e7;
-  --pill-bg: #effaf3;
+  --input-bg: #fffdf6;
+  --input-disabled-bg: #f3ecdd;
+  --surface-subtle: #fff0d8;
+  --pill-bg: #f5f9e9;
   --pill-border: #273143;
   --success: #12ae55;
   --danger: #ef6f6c;
@@ -1921,6 +1921,12 @@ details.card > summary {
   .auth-card {
     padding: 27px 20px;
     box-shadow: 6px 6px 0 var(--ink);
+  }
+}
+
+@media (max-width: 360px) {
+  .daily-stats-race .lb-pill:last-child {
+    display: inline-flex;
   }
 }
 
