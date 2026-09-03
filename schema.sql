@@ -44,22 +44,25 @@ CREATE TABLE daily_riddles (
 );
 
 CREATE TABLE riddle_overrides (
-    day_key date PRIMARY KEY,
+    day_key date NOT NULL,
+    theme text NOT NULL DEFAULT 'general',
     riddle_id bigint REFERENCES riddles(id),
     question text,
     type text CHECK (type IN ('word','number')),
     answer text,
-    explanation text
+    explanation text,
+    PRIMARY KEY (day_key, theme)
 );
 
 CREATE TABLE riddle_schedule (
-    day_key date PRIMARY KEY,
+    day_key date NOT NULL,
+    theme text NOT NULL DEFAULT 'general',
     riddle_id bigint REFERENCES riddles(id),
     type text CHECK (type IN ('word','number')),
     question text,
     answer text,
     explanation text,
-    theme text DEFAULT 'general'
+    PRIMARY KEY (day_key, theme)
 );
 
 CREATE TABLE attempts (
