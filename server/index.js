@@ -4,14 +4,90 @@ import dotenv from 'dotenv';
 import pkg from 'pg';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 
 dotenv.config();
 
 const { Pool } = pkg;
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://brainteaserday.com',
+  'https://www.brainteaserday.com',
+];
+
+const configuredOrigins = String(process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = new Set([
+  ...DEFAULT_ALLOWED_ORIGINS,
+  ...configuredOrigins,
+]);
+
+const corsOptions = {
+  origin(origin, callback) {
+    // Les requêtes sans Origin (health checks, curl, serveur à serveur)
+    // ne sont pas soumises à la politique CORS des navigateurs.
+    if (!origin || allowedOrigins.has(origin)) {
+      return callback(null, true);
+    }
+
+    const error = new Error('Origine non autorisée par CORS.');
+    error.code = 'CORS_NOT_ALLOWED';
+    return callback(error);
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Authorization', 'Content-Type'],
+  maxAge: 86400,
+};
+
+function jsonRateLimitHandler(message) {
+  return (req, res) => res.status(429).json({ error: message });
+}
+
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  handler: jsonRateLimitHandler(
+    'Trop de tentatives de connexion. Réessaie dans 15 minutes.'
+  ),
+});
+
+const registerRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler(
+    "Trop de tentatives d'inscription. Réessaie plus tard."
+  ),
+});
+
+// L'API n'est joignable que derrière le reverse proxy Caddy local.
+// Une seule adresse proxy doit donc être dépilée pour retrouver l'IP cliente.
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(helmet());
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '32kb' }));
+
+app.use((error, req, res, next) => {
+  if (error?.code === 'CORS_NOT_ALLOWED') {
+    return res.status(403).json({ error: 'Origine non autorisée.' });
+  }
+
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Corps de requête trop volumineux.' });
+  }
+
+  return next(error);
+});
 
 const pool = new Pool({
   host: 'localhost',
@@ -36,6 +112,22 @@ function createToken(user) {
     },
     JWT_SECRET,
     { expiresIn: '7d' }
+  );
+}
+
+function isValidEmail(email) {
+  return (
+    typeof email === 'string' &&
+    email.length <= 254 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  );
+}
+
+function isValidNewPassword(password) {
+  return (
+    typeof password === 'string' &&
+    password.length >= 8 &&
+    Buffer.byteLength(password, 'utf8') <= 72
   );
 }
 
@@ -213,22 +305,37 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-app.post('/api/auth/register', async (req, res) => {
-  const { email, password, username } = req.body;
+app.post('/api/auth/register', registerRateLimit, async (req, res) => {
+  const { email, password, username } = req.body || {};
 
-  if (!email || !password) {
+  if (typeof email !== 'string' || typeof password !== 'string') {
     return res.status(400).json({
       error: 'Email et mot de passe requis.',
     });
   }
 
-  if (password.length < 8) {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (!isValidEmail(normalizedEmail)) {
     return res.status(400).json({
-      error: 'Le mot de passe doit contenir au moins 8 caractères.',
+      error: 'Adresse email invalide.',
     });
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
+  if (!isValidNewPassword(password)) {
+    return res.status(400).json({
+      error: 'Le mot de passe doit contenir entre 8 et 72 octets.',
+    });
+  }
+
+  if (
+    username != null &&
+    (typeof username !== 'string' || username.trim().length > 50)
+  ) {
+    return res.status(400).json({
+      error: "Le nom d'utilisateur est invalide ou trop long.",
+    });
+  }
 
   const client = await pool.connect();
 
@@ -300,16 +407,22 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
+app.post('/api/auth/login', loginRateLimit, async (req, res) => {
+  const { email, password } = req.body || {};
 
-  if (!email || !password) {
+  if (typeof email !== 'string' || typeof password !== 'string') {
     return res.status(400).json({
       error: 'Email et mot de passe requis.',
     });
   }
 
   const normalizedEmail = email.trim().toLowerCase();
+
+  if (!isValidEmail(normalizedEmail) || password.length > 256) {
+    return res.status(401).json({
+      error: 'Email ou mot de passe incorrect.',
+    });
+  }
 
   try {
     const result = await pool.query(
@@ -537,17 +650,26 @@ app.patch('/api/me/profile', requireAuth, async (req, res) => {
 
 // Changer son mot de passe
 app.post('/api/me/password', requireAuth, async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
+  const { currentPassword, newPassword } = req.body || {};
 
-  if (!currentPassword || !newPassword) {
+  if (
+    typeof currentPassword !== 'string' ||
+    typeof newPassword !== 'string'
+  ) {
     return res.status(400).json({
       error: 'Mot de passe actuel et nouveau mot de passe requis.',
     });
   }
 
-  if (newPassword.length < 8) {
+  if (!isValidNewPassword(newPassword)) {
     return res.status(400).json({
-      error: 'Le nouveau mot de passe doit contenir au moins 8 caractères.',
+      error: 'Le nouveau mot de passe doit contenir entre 8 et 72 octets.',
+    });
+  }
+
+  if (currentPassword.length > 256) {
+    return res.status(401).json({
+      error: 'Mot de passe actuel incorrect.',
     });
   }
 
@@ -3073,3 +3195,4 @@ app.delete(
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`API Brainteaserday sur http://127.0.0.1:${PORT}`);
 });
+
