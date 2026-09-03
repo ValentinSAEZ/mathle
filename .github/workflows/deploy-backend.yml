@@ -1,6 +1,15 @@
 name: Deploy BrainteaserDay Backend
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "server/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/deploy-backend.yml"
+
   push:
     branches:
       - main
@@ -67,6 +76,7 @@ jobs:
   deploy:
     name: Deploy VPS
     needs: validate
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -119,3 +129,4 @@ jobs:
             echo
             echo "Deployment successful: $NEW_COMMIT"
           EOF
+
