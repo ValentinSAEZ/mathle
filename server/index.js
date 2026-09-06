@@ -6,6 +6,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import { createLearningRouter } from './learning.mjs';
 
 dotenv.config();
 
@@ -888,11 +889,11 @@ app.get('/api/riddles/today/history', requireAuth, async (req, res) => {
 // SOUMETTRE UNE RÉPONSE
 // ─────────────────────────────────────────────
 
+app.use('/api/learning', createLearningRouter({ pool, requireAuth, secret: JWT_SECRET }));
+
 app.post('/api/riddles/:id/guess', requireAuth, async (req, res) => {
   const riddleId = Number(req.params.id);
-  const day = String(
-    req.body.day || new Date().toISOString().slice(0, 10)
-  );
+  const day = new Date().toISOString().slice(0, 10);
   const guess = String(req.body.guess || '').trim();
 
   if (!Number.isInteger(riddleId) || riddleId <= 0) {
@@ -901,15 +902,15 @@ app.post('/api/riddles/:id/guess', requireAuth, async (req, res) => {
     });
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+  if (req.body.day != null && req.body.day !== day) {
     return res.status(400).json({
-      error: 'Date invalide.',
+      error: 'La journée a changé. Recharge les énigmes du jour.',
     });
   }
 
-  if (!guess) {
+  if (!guess || guess.length > 128) {
     return res.status(400).json({
-      error: 'Réponse requise.',
+      error: 'Réponse requise (128 caractères maximum).',
     });
   }
 
@@ -917,6 +918,9 @@ app.post('/api/riddles/:id/guess', requireAuth, async (req, res) => {
 
   try {
     await client.query('BEGIN');
+
+    // Serialize guesses from the same player before checking solve/rate/XP state.
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [req.user.id]);
 
     // Bannissement
     const banResult = await client.query(

@@ -52,6 +52,9 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Test learning API
+        run: node --test server/learning.test.mjs
+
       - name: Refuse automatic database migrations
         if: github.event_name == 'push'
         shell: bash
