@@ -223,11 +223,6 @@ useEffect(() => {
           <div className="home-grid">
             <div style={{ display: 'grid', gap: 16 }}>
               <Game session={session} />
-              <section className="card learning-invite">
-                <h2>📒 Ton atelier de réflexion</h2>
-                <p>Retrouve les énigmes qui t'ont fait hésiter et entraîne-toi à ton rythme.</p>
-                <button className="btn btn-primary" onClick={() => setView('learning')}>M'entraîner et ouvrir mon carnet</button>
-              </section>
               <StatsToday />
             </div>
             <div className="leaderboard-col">
@@ -240,6 +235,11 @@ useEffect(() => {
               <div className={showLeaderboard ? 'leaderboard-visible' : 'leaderboard-hidden'}>
                 <Leaderboard onSelectUser={(uid) => { setProfileUserId(uid); setView('profile'); }} />
               </div>
+              <section className="card learning-invite">
+                <h2>📒 Ton atelier de réflexion</h2>
+                <p>Retrouve les énigmes qui t'ont fait hésiter et entraîne-toi à ton rythme.</p>
+                <button className="btn btn-primary" onClick={() => setView('learning')}>M'entraîner et ouvrir mon carnet</button>
+              </section>
             </div>
           </div>
         ) : view === 'learning' ? (

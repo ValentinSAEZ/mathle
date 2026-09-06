@@ -30,6 +30,7 @@
 .learning-explanation { padding: 16px; margin-top: 12px; background: var(--surface-subtle); border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
 .learning-explanation p { margin: 0; }
 .learning-invite { padding: 20px; }
+.leaderboard-col > .learning-invite { margin-top: 16px; }
 .learning-invite h2 { font-size: 20px; margin: 0 0 8px; }
 .learning-invite p { color: var(--muted); line-height: 1.5; }
 @media (max-width: 540px) {
