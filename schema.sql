@@ -15,6 +15,7 @@ CREATE TABLE profiles (
     is_admin boolean NOT NULL DEFAULT false,
     bio text DEFAULT '',
     avatar_color text DEFAULT '#6366f1',
+    avatar_image text NOT NULL DEFAULT '' CHECK (length(avatar_image) <= 24000),
     xp integer NOT NULL DEFAULT 0
 );
 
