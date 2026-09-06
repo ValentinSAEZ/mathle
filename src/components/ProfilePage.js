@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { getLevelInfo, getXpProgress } from '../lib/celebrate';
+import { prepareProfilePhoto } from '../lib/profilePhoto';
+import './profile-personalization.css';
 const API_URL = 'https://api.brainteaserday.com';
 
 
@@ -60,11 +62,16 @@ export default function ProfilePage({ session, userId }) {
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
   const [avatarColor, setAvatarColor] = useState('#6366f1');
-  const [createdAt, setCreatedAt] = useState(selfUser?.created_at || '');
   const [isAdminTarget, setIsAdminTarget] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [editing, setEditing] = useState(false);
+  const [avatarImage, setAvatarImage] = useState('');
+  const [editImage, setEditImage] = useState('');
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoRequest = useRef({ version: 0 });
+  useEffect(() => { const tracker = photoRequest.current; tracker.version++; setEditing(false); setPhotoBusy(false); setMessage(''); return () => { tracker.version++; }; }, [targetUserId]);
+  useEffect(() => { if (editing) document.getElementById('profile-studio-heading')?.focus(); }, [editing]);
   const [editUsername, setEditUsername] = useState('');
   const [editBio, setEditBio] = useState('');
   const [editColor, setEditColor] = useState('#6366f1');
@@ -103,7 +110,8 @@ export default function ProfilePage({ session, userId }) {
 
   const currentStreak = useMemo(() => {
     let s = 0;
-    for (let i = range.length - 1; i >= 0; i--) { if (solvedMap.get(range[i].key) === true) s++; else break; }
+    const last = solvedMap.get(range.at(-1).key) ? range.length - 1 : range.length - 2;
+    for (let i = last; i >= 0; i--) { if (solvedMap.get(range[i].key) === true) s++; else break; }
     return s;
   }, [range, solvedMap]);
 
@@ -132,7 +140,7 @@ useEffect(() => {
       setUsername(profile?.username || '');
       setBio(profile?.bio || '');
       setAvatarColor(profile?.avatar_color || '#6366f1');
-      setCreatedAt(profile?.created_at || selfUser?.created_at || '');
+      setAvatarImage(profile?.avatar_image || '');
       setIsAdminTarget(Boolean(profile?.is_admin));
       setUserXp(profile?.xp || 0);
     } catch {
@@ -222,14 +230,27 @@ useEffect(() => {
     setEditUsername(username);
     setEditBio(bio);
     setEditColor(avatarColor);
+    setEditImage(avatarImage);
+    setTab('settings');
     setEditing(true);
     setMessage('');
-  }, [username, bio, avatarColor]);
+  }, [username, bio, avatarColor, avatarImage]);
+
+  async function choosePhoto(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const request = ++photoRequest.current.version;
+    setPhotoBusy(true); setMessage('');
+    try { const image = await prepareProfilePhoto(file); if (request === photoRequest.current.version) setEditImage(image); }
+    catch (error) { if (request === photoRequest.current.version) setMessage(error.message || 'Impossible de lire cette image.'); }
+    finally { if (request === photoRequest.current.version) setPhotoBusy(false); }
+  }
 
 const save = async (e) => {
   e?.preventDefault?.();
 
-  if (!selfUser?.id || !isSelf) return;
+  if (!selfUser?.id || !isSelf || photoBusy || saving) return;
 
   setSaving(true);
   setMessage('');
@@ -249,6 +270,7 @@ const save = async (e) => {
           username: editUsername.trim(),
           bio: editBio.trim(),
           avatar_color: editColor,
+          avatar_image: editImage,
         }),
       }
     );
@@ -264,6 +286,7 @@ const save = async (e) => {
     setUsername(profile.username || '');
     setBio(profile.bio || '');
     setAvatarColor(profile.avatar_color || '#6366f1');
+    setAvatarImage(profile.avatar_image || '');
 
     setMessage('Profil enregistré !');
     setEditing(false);
@@ -340,10 +363,10 @@ const changePassword = async (e) => {
   const earnedKeys = useMemo(() => new Set(achievements.map(a => a.key)), [achievements]);
 
   const tabs = [
-    { key: 'overview', label: 'Apercu', icon: '📊' },
-    { key: 'achievements', label: 'Succes', icon: '🏅' },
+    { key: 'overview', label: 'Mon parcours', icon: '📊' },
+    { key: 'achievements', label: 'Succès', icon: '🏅' },
     { key: 'race', label: 'Course', icon: '🏁' },
-    ...(isSelf ? [{ key: 'settings', label: 'Parametres', icon: '⚙️' }] : []),
+
   ];
 
   return (
@@ -354,7 +377,7 @@ const changePassword = async (e) => {
         <div className="profile-header-content">
           <div className="profile-avatar-wrapper">
             <div className="profile-avatar-lg" style={{ background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc)` }}>
-              {initials}
+              {avatarImage ? <img src={avatarImage} alt={username || 'Avatar'} /> : initials}
             </div>
             {isAdminTarget && <span className="badge-admin-float">Admin</span>}
           </div>
@@ -369,40 +392,32 @@ const changePassword = async (e) => {
                 <div className="xp-bar-mini-fill" style={{ width: `${xpProgress * 100}%`, background: levelInfo.color }} />
               </div>
             </div>
-            <div className="profile-meta">
-              <span>Inscrit le {createdAt ? fmtDate(createdAt) : '—'}</span>
-              <span className="profile-meta-dot" />
-              <span>{userXp} XP</span>
-              <span className="profile-meta-dot" />
-              <span>{totalSolved} enigmes resolues</span>
-            </div>
+            <div className="profile-meta"><span>{userXp} XP</span></div>
           </div>
+          {isSelf && tab !== 'settings' && <button className="btn btn-primary profile-header-action" onClick={startEditing}>Personnaliser</button>}
         </div>
 
         {/* Quick stats row */}
         <div className="profile-quick-stats">
           <div className="profile-qstat">
             <span className="profile-qstat-value">{currentStreak}</span>
-            <span className="profile-qstat-label">Serie</span>
+            <span className="profile-qstat-label">Série</span>
           </div>
           <div className="profile-qstat-divider" />
           <div className="profile-qstat">
-            <span className="profile-qstat-value">{bestScore}</span>
-            <span className="profile-qstat-label">Meilleur score</span>
+            <span className="profile-qstat-value">{totalSolved}</span>
+            <span className="profile-qstat-label">Jours actifs · 6 semaines</span>
           </div>
           <div className="profile-qstat-divider" />
           <div className="profile-qstat">
             <span className="profile-qstat-value">{achievements.length}</span>
-            <span className="profile-qstat-label">Succes</span>
+            <span className="profile-qstat-label">Succès</span>
           </div>
-          <div className="profile-qstat-divider" />
-          <div className="profile-qstat">
-            <span className="profile-qstat-value">{raceRuns.length}</span>
-            <span className="profile-qstat-label">Courses</span>
-          </div>
+
         </div>
       </div>
 
+      {message && tab !== 'settings' && <p role="status">{message}</p>}
       {/* Tabs */}
       <div className="profile-tabs">
         {tabs.map(t => (
@@ -422,7 +437,7 @@ const changePassword = async (e) => {
           <div style={{ display: 'grid', gap: 16 }}>
             {/* Completion grid */}
             <section className="card section">
-              <h3 className="section-title">Jours de completion</h3>
+              <h3 className="section-title">Tes 6 dernières semaines</h3>
               <div className="completion-grid-wrapper">
                 <div className="completion-grid-labels">
                   {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
@@ -450,11 +465,11 @@ const changePassword = async (e) => {
             {/* Recent achievements preview */}
             <section className="card section">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 className="section-title" style={{ margin: 0 }}>Succes recents</h3>
+                <h3 className="section-title" style={{ margin: 0 }}>Succès récents</h3>
                 <button className="btn-link" onClick={() => setTab('achievements')}>Voir tout →</button>
               </div>
               {achievements.length === 0 ? (
-                <div style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', padding: '12px 0' }}>Aucun succes debloque</div>
+                <div style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', padding: '12px 0' }}>Ta collection commence ici. Résous ta première énigme pour débloquer un succès.</div>
               ) : (
                 <div style={{ display: 'grid', gap: 8 }}>
                   {achievements.slice(0, 3).map((a, i) => {
@@ -478,7 +493,7 @@ const changePassword = async (e) => {
         {tab === 'achievements' && (
           <div style={{ display: 'grid', gap: 16 }}>
             <section className="card section">
-              <h3 className="section-title">Tous les succes</h3>
+              <h3 className="section-title">Tous les succès</h3>
               <div className="achievements-progress">
                 <div className="achievements-progress-bar">
                   <div className="achievements-progress-fill" style={{ width: `${ALL_ACHIEVEMENT_KEYS.length > 0 ? (earnedKeys.size / ALL_ACHIEVEMENT_KEYS.length) * 100 : 0}%` }} />
@@ -578,7 +593,7 @@ const changePassword = async (e) => {
           <div style={{ display: 'grid', gap: 16 }}>
             {/* Edit Profile */}
             <section className="card section">
-              <h3 className="section-title">Modifier le profil</h3>
+              <h3 id="profile-studio-heading" tabIndex={-1} className="section-title">Ton studio de personnalisation</h3>
               {!editing ? (
                 <div>
                   <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
@@ -599,17 +614,28 @@ const changePassword = async (e) => {
                     </div>
                   </div>
                   <button className="btn btn-primary" onClick={startEditing} style={{ width: '100%' }}>Modifier</button>
-                  {message && <div style={{ fontSize: 13, marginTop: 8, color: message.includes('!') ? 'var(--success)' : 'var(--danger)' }}>{message}</div>}
+                  {message && <div role="status" style={{ fontSize: 13, marginTop: 8, color: message.includes('!') ? 'var(--success)' : 'var(--danger)' }}>{message}</div>}
                 </div>
               ) : (
-                <form onSubmit={save} style={{ display: 'grid', gap: 14 }}>
+                <form onSubmit={save} className="profile-editor" style={{ display: 'grid', gap: 14 }}>
+                  <fieldset disabled={saving || photoBusy}><legend>Ton identité publique</legend>
+                  <div className="profile-studio-preview">
+                    <div className="profile-avatar-preview" style={{ background: editColor }}>{editImage ? <img src={editImage} alt="Ton avatar" /> : (editUsername.trim().slice(0, 2).toUpperCase() || '?')}</div>
+                    <div><strong>{editUsername || 'Ton pseudo'}</strong><p>{editBio || 'Ton histoire commence ici.'}</p></div>
+                  </div>
+                  <label htmlFor="profile-photo" className="field-label">Photo de profil</label>
+                  <div className="profile-photo-controls">
+                    <input id="profile-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={choosePhoto} aria-describedby="profile-photo-help" />
+                    {editImage && <button type="button" className="btn btn-soft" onClick={() => setEditImage('')}>Retirer la photo</button>}
+                  </div>
+                  <p id="profile-photo-help" style={{ color: 'var(--muted)', margin: 0 }}>JPG, PNG ou WebP · 5 Mo maximum. La photo est centrée et recadrée au carré. Elle sera visible sur ton profil public après enregistrement.</p>
                   <div>
                     <div className="field-label">Nom d'utilisateur</div>
-                    <input type="text" value={editUsername} onChange={(e) => setEditUsername(e.target.value)} placeholder="Nom d'utilisateur" required className="input" />
+                    <input aria-label="Nom d’utilisateur" maxLength={50} type="text" value={editUsername} onChange={(e) => setEditUsername(e.target.value)} placeholder="Nom d'utilisateur" required className="input" />
                   </div>
                   <div>
                     <div className="field-label">Bio</div>
-                    <textarea value={editBio} onChange={(e) => setEditBio(e.target.value)} placeholder="Parlez de vous..." className="input" rows={3} maxLength={200} style={{ resize: 'vertical' }} />
+                    <textarea aria-label="Bio" value={editBio} onChange={(e) => setEditBio(e.target.value)} placeholder="Parlez de vous..." className="input" rows={3} maxLength={200} style={{ resize: 'vertical' }} />
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, textAlign: 'right' }}>{editBio.length}/200</div>
                   </div>
                   <div>
@@ -623,28 +649,32 @@ const changePassword = async (e) => {
                           style={{ background: c }}
                           onClick={() => setEditColor(c)}
                           title={c}
+                          aria-label={`Couleur ${c}`}
+                          aria-pressed={editColor === c}
                         />
                       ))}
                     </div>
                     <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div className="profile-avatar-preview" style={{ background: `linear-gradient(135deg, ${editColor}, ${editColor}cc)` }}>
-                        {initials}
+                        {editImage ? <img src={editImage} alt="Aperçu" /> : (editUsername.trim().slice(0, 2).toUpperCase() || '?')}
                       </div>
-                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>Apercu</span>
+                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>Aperçu</span>
                     </div>
                   </div>
+                  </fieldset>
+                  {photoBusy && <p role="status">Préparation de ta photo…</p>}
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button type="button" className="btn" onClick={() => { setEditing(false); setMessage(''); }} style={{ flex: 1 }}>Annuler</button>
-                    <button type="submit" className="btn btn-primary" disabled={saving} style={{ flex: 1 }}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
+                    <button type="button" className="btn" disabled={saving} onClick={() => { photoRequest.current.version++; setPhotoBusy(false); setEditing(false); setMessage(''); setTab('overview'); }} style={{ flex: 1 }}>Annuler</button>
+                    <button type="submit" className="btn btn-primary" disabled={saving || photoBusy} style={{ flex: 1 }}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
                   </div>
-                  {message && <div style={{ fontSize: 13, color: message.includes('!') ? 'var(--success)' : 'var(--danger)' }}>{message}</div>}
+                  {message && <div role="status" style={{ fontSize: 13, color: message.includes('!') ? 'var(--success)' : 'var(--danger)' }}>{message}</div>}
                 </form>
               )}
             </section>
 
             {/* Security */}
-            <section className="card section">
-              <h3 className="section-title">Securite</h3>
+            <details className="card section">
+              <summary className="section-title">Mot de passe</summary>
               <form onSubmit={changePassword} style={{ display: 'grid', gap: 12, maxWidth: 400 }}>
                 <div>
                   <div className="field-label">Mot de passe actuel</div>
@@ -652,7 +682,7 @@ const changePassword = async (e) => {
                 </div>
                 <div>
                   <div className="field-label">Nouveau mot de passe</div>
-                  <input type="password" className="input" value={pw1} onChange={(e) => setPw1(e.target.value)} placeholder="Au moins 6 caracteres" required autoComplete="new-password" />
+                  <input type="password" className="input" value={pw1} onChange={(e) => setPw1(e.target.value)} placeholder="Au moins 8 caractères" required autoComplete="new-password" />
                 </div>
                 <div>
                   <div className="field-label">Confirmer</div>
@@ -665,7 +695,7 @@ const changePassword = async (e) => {
                   {pwMsg && <span style={{ fontSize: 13, color: pwMsg.includes('!') ? 'var(--success)' : 'var(--danger)' }}>{pwMsg}</span>}
                 </div>
               </form>
-            </section>
+            </details>
           </div>
         )}
       </div>

@@ -4,6 +4,8 @@ import { learningApi } from '../lib/learningApi';
 import Correction from './Correction';
 import './learning.css';
 
+const PRACTICE_THEMES = ['general', 'logique', 'probabilites', 'geometrie', 'finance', 'arithmetique'];
+
 export default function LearningPage({ onBack }) {
   const [tab, setTab] = useState('practice');
   const [theme, setTheme] = useState('arithmetique');
@@ -51,7 +53,7 @@ export default function LearningPage({ onBack }) {
     finally { if (request.current === controller) setBusy(false); }
   }
   const train = category => {
-    reset(); setTheme(RIDDLE_THEMES[category] ? category : 'general'); setTab('practice');
+    reset(); setTheme(PRACTICE_THEMES.includes(category) ? category : 'general'); setTab('practice');
     window.scrollTo({ top: 0, behavior: 'auto' });
   };
 
@@ -70,7 +72,7 @@ export default function LearningPage({ onBack }) {
     {tab === 'practice' ? <section className="card learning-workspace" aria-label="Entraînement ciblé">
       <div className="learning-options">
         <label>Catégorie<select value={theme} disabled={busy} onChange={e => { reset(); setTheme(e.target.value); }}>
-          {Object.entries(RIDDLE_THEMES).map(([key, t]) => <option key={key} value={key}>{t.icon} {t.label}</option>)}
+          {PRACTICE_THEMES.map(key => <option key={key} value={key}>{RIDDLE_THEMES[key].icon} {RIDDLE_THEMES[key].label}</option>)}
         </select></label>
         <label>Niveau<select value={level} disabled={busy} onChange={e => { reset(); setLevel(Number(e.target.value)); }}>
           <option value={1}>Découverte</option><option value={2}>Pratique</option><option value={3}>Défi</option>

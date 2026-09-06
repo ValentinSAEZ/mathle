@@ -1,4 +1,5 @@
 import express from 'express';
+import { validProfilePhoto } from './profile-photo.mjs';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import pkg from 'pg';
@@ -540,6 +541,7 @@ app.get('/api/profiles/:id', async (req, res) => {
         is_admin,
         bio,
         avatar_color,
+        avatar_image,
         xp
       FROM profiles
       WHERE id = $1
@@ -568,7 +570,8 @@ app.get('/api/profiles/:id', async (req, res) => {
 
 // Modifier son propre profil
 app.patch('/api/me/profile', requireAuth, async (req, res) => {
-  const { username, bio, avatar_color } = req.body;
+  const { username, bio, avatar_color, avatar_image } = req.body || {};
+  if (avatar_image !== undefined && !validProfilePhoto(avatar_image)) return res.status(400).json({ error: "Photo invalide ou trop volumineuse. Importe une nouvelle image." });
 
   const cleanUsername = String(username || '').trim();
   const cleanBio = String(bio || '').trim();
@@ -605,7 +608,8 @@ app.patch('/api/me/profile', requireAuth, async (req, res) => {
       SET
         username = $1,
         bio = $2,
-        avatar_color = $3
+        avatar_color = $3,
+        avatar_image = COALESCE($5, avatar_image)
       WHERE id = $4
       RETURNING
         id,
@@ -614,6 +618,7 @@ app.patch('/api/me/profile', requireAuth, async (req, res) => {
         is_admin,
         bio,
         avatar_color,
+        avatar_image,
         xp
       `,
       [
@@ -621,6 +626,7 @@ app.patch('/api/me/profile', requireAuth, async (req, res) => {
         cleanBio,
         cleanColor,
         req.user.id,
+        avatar_image === undefined ? null : avatar_image,
       ]
     );
 
