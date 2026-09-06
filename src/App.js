@@ -10,6 +10,7 @@ import ArchivePage from "./components/ArchivePage";
 import ForumPage from "./components/ForumPage";
 import LandingPage from "./components/LandingPage";
 import StatsToday from "./components/StatsToday";
+import LearningPage from './components/LearningPage';
 const API_URL = 'https://api.brainteaserday.com';
 
 
@@ -222,6 +223,11 @@ useEffect(() => {
           <div className="home-grid">
             <div style={{ display: 'grid', gap: 16 }}>
               <Game session={session} />
+              <section className="card learning-invite">
+                <h2>📒 Ton atelier de réflexion</h2>
+                <p>Retrouve les énigmes qui t'ont fait hésiter et entraîne-toi à ton rythme.</p>
+                <button className="btn btn-primary" onClick={() => setView('learning')}>M'entraîner et ouvrir mon carnet</button>
+              </section>
               <StatsToday />
             </div>
             <div className="leaderboard-col">
@@ -236,6 +242,8 @@ useEffect(() => {
               </div>
             </div>
           </div>
+        ) : view === 'learning' ? (
+          <LearningPage key={session.user.id} onBack={() => setView('home')} />
         ) : view === 'profile' ? (
           <ProfilePage session={session} userId={profileUserId || session.user.id} />
         ) : view === 'forum' ? (

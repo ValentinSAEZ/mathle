@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { bigCelebration, burstConfetti, pulseOnce, getLevelInfo, getXpProgress, RIDDLE_THEMES } from "../lib/celebrate";
+import Correction from './Correction';
 const API_URL = 'https://api.brainteaserday.com';
 
 
@@ -614,6 +615,7 @@ const handleSubmit = async (e, riddle) => {
               )}
 
               {/* Historique */}
+              {rs.solved && <Correction key={`${dayKey}-${activeRiddle.riddle_id}`} riddleId={activeRiddle.riddle_id} day={dayKey} />}
               <div className="card game-history-card">
                 <div className="game-history-header">
                   <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Historique</h3>
